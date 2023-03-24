@@ -59,8 +59,7 @@ export async function loadSceneFromURL(mujoco, filename, scene) {
       let geometry = new THREE.SphereGeometry(size[0] * 0.5);
       if (type == mujoco.mjtGeom.mjGEOM_PLANE.value) {
         // Special handling for plane later.
-      }
-      else if (type == mujoco.mjtGeom.mjGEOM_HFIELD.value) {
+      } else if (type == mujoco.mjtGeom.mjGEOM_HFIELD.value) {
         // TODO: Implement this.
       } else if (type == mujoco.mjtGeom.mjGEOM_SPHERE.value) {
         geometry = new THREE.SphereGeometry(size[0]);
@@ -268,6 +267,20 @@ export async function downloadExampleScenesFolder(mujoco) {
     "mug.obj",
     "mug.png",
     "mug.xml",
+    "piano_with_shadow_hands/f_distal_pst-927e7e0da0ee76e69c0444b22bade45ff20ab5ee.obj",
+    "piano_with_shadow_hands/f_knuckle-4e74747ced8908917157e00df691de5cfc71808c.obj",
+    "piano_with_shadow_hands/f_middle-c817011a5fccb8dac0f3201f10aa30ffa74db8b6.obj",
+    "piano_with_shadow_hands/f_proximal-2b944834ac12ce9bb152073bce3db339405bc76d.obj",
+    "piano_with_shadow_hands/forearm_0-20abf0e17ef9afc17a625f75fc0ad21f31b2ff9a.obj",
+    "piano_with_shadow_hands/forearm_1-f5b8ac92a6e1b0a6b27c50dac2004867e6c0fb5b.obj",
+    "piano_with_shadow_hands/forearm_collision-3ef43cdb2273599be12fc3270639b8782c869cb4.obj",
+    "piano_with_shadow_hands/lf_metacarpal-43a8cbd60c754686e733e10c0c28ff082b46a917.obj",
+    "piano_with_shadow_hands/palm-20de86ceb3b063e7ca1bf25fa6ddd07c068d6a70.obj",
+    "piano_with_shadow_hands/scene.xml",
+    "piano_with_shadow_hands/th_distal_pst-c003d5be2d6a841babda3d88c51010617a2ba4bb.obj",
+    "piano_with_shadow_hands/th_middle-c6937ecc6bf6b01a854aaffb71f3beeda05f8ac3.obj",
+    "piano_with_shadow_hands/th_proximal-836fc483b89bf08806ab50636ab1fe738a54406e.obj",
+    "piano_with_shadow_hands/wrist-87545134a753f219a1f55310cc200489b3a03c47.obj",
     "scene.xml",
     "shadow_hand/assets/f_distal_pst.obj",
     "shadow_hand/assets/f_knuckle.obj",

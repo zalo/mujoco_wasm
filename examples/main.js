@@ -320,7 +320,7 @@ async function init() {
 
   await downloadExampleScenesFolder(mujoco);    // Download the the examples to MuJoCo's virtual file system
   [model, state, simulation, bodies, lights] =  // Initialize the three.js Scene using this .xml Model
-    await loadSceneFromURL(mujoco, "humanoid.xml", scene);
+    await loadSceneFromURL(mujoco, "piano_with_shadow_hands/scene.xml", scene);
 }
 
 function onWindowResize() {
@@ -453,6 +453,17 @@ function render(timeMS) {
       getPosition  (simulation.xpos (), b, bodies[b].position);
       getQuaternion(simulation.xquat(), b, bodies[b].quaternion);
       bodies[b].updateWorldMatrix();
+    }
+  }
+
+  for (let b = 0; b < model.nbody(); b++) {
+    if (bodies[b]) {
+      let jnt_adr = model.body_jntadr()[b];
+      if (jnt_adr < 0) { continue; }
+      let qpos_adr = model.jnt_qposadr()[jnt_adr];
+      if (simulation.qpos()[qpos_adr] > 0.025) {
+        console.log("Key at", qpos_adr, "is pressed!");
+      }
     }
   }
 
