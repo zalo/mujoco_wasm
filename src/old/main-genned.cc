@@ -31,7 +31,7 @@ public:
   mjtNum timeconst             () { return m->timeconst             ; } // maximum force; 0: no limit
   mjtNum timestep              () { return m->timestep              ; } // time constant for velocity reduction; min 0.01
   mjtNum inttotal              () { return m->inttotal              ; } // simulation timestep; 0: use mjOption.timestep
-  mjtNum inteval               () { return m->inteval               ; } // total simulation time interval
+  mjtNum interval              () { return m->interval              ; } // total simulation time interval
   mjtNum tolrange              () { return m->tolrange              ; } // evaluation time interval (at the end)
 private:
   mjLROpt *m;
@@ -475,7 +475,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("timeconst"           , &LROpt::timeconst             )
       .function("timestep"            , &LROpt::timestep              )
       .function("inttotal"            , &LROpt::inttotal              )
-      .function("inteval"             , &LROpt::inteval               )
+      .function("interval"            , &LROpt::interval               )
       .function("tolrange"            , &LROpt::tolrange              )
 ;
 

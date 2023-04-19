@@ -40,10 +40,7 @@
 #define mjNSOLVER       1000      // size of mjData.solver_XXX arrays
 
 
-//---------------------------------- primitive types (mjt) -----------------------------------------
-
-typedef unsigned char mjtByte;    // used for true/false
-
+//---------------------------------- enum types (mjt) ----------------------------------------------
 
 typedef enum mjtDisableBit_ {     // disable default feature bitflags
   mjDSBL_CONSTRAINT   = 1<<0,     // entire constraint solver
@@ -59,8 +56,9 @@ typedef enum mjtDisableBit_ {     // disable default feature bitflags
   mjDSBL_ACTUATION    = 1<<10,    // apply actuation forces
   mjDSBL_REFSAFE      = 1<<11,    // integrator safety: make ref[0]>=2*timestep
   mjDSBL_SENSOR       = 1<<12,    // sensors
+  mjDSBL_MIDPHASE     = 1<<13,    // mid-phase collision filtering
 
-  mjNDISABLE          = 13        // number of disable flags
+  mjNDISABLE          = 14        // number of disable flags
 } mjtDisableBit;
 
 
@@ -128,7 +126,8 @@ typedef enum mjtTexture_ {        // type of texture
 typedef enum mjtIntegrator_ {     // integrator mode
   mjINT_EULER         = 0,        // semi-implicit Euler
   mjINT_RK4,                      // 4th-order Runge Kutta
-  mjINT_IMPLICIT                  // implicit in velocity
+  mjINT_IMPLICIT,                 // implicit in velocity
+  mjINT_IMPLICITFAST              // implicit in velocity, no rne derivative
 } mjtIntegrator;
 
 
@@ -362,7 +361,7 @@ struct mjLROpt_ {                 // options for mj_setLengthRange()
   mjtNum timeconst;               // time constant for velocity reduction; min 0.01
   mjtNum timestep;                // simulation timestep; 0: use mjOption.timestep
   mjtNum inttotal;                // total simulation time interval
-  mjtNum inteval;                 // evaluation time interval (at the end)
+  mjtNum interval;                // evaluation time interval (at the end)
   mjtNum tolrange;                // convergence tolerance (relative to range)
 };
 typedef struct mjLROpt_ mjLROpt;
@@ -372,7 +371,7 @@ typedef struct mjLROpt_ mjLROpt;
 
 struct mjVFS_ {                   // virtual file system for loading from memory
   int   nfile;                    // number of files present
-  char  filename[mjMAXVFS][mjMAXVFSNAME]; // file name without path
+  char  filename[mjMAXVFS][mjMAXVFSNAME];  // file name without path
   int   filesize[mjMAXVFS];       // file size in bytes
   void* filedata[mjMAXVFS];       // buffer with file data
 };
@@ -432,6 +431,7 @@ struct mjVisual_ {                // visualization options
     float realtime;               // initial real-time factor (1: real time)
     int offwidth;                 // width of offscreen buffer
     int offheight;                // height of offscreen buffer
+    int treedepth;                // depth of the bounding volume hierarchy
   } global;
 
   struct {                        // rendering quality
@@ -535,6 +535,7 @@ struct mjModel_ {
   int nu;                         // number of actuators/controls = dim(ctrl)
   int na;                         // number of activation states = dim(act)
   int nbody;                      // number of bodies
+  int nbvh;                       // number of total bounding volumes in all bodies
   int njnt;                       // number of joints
   int ngeom;                      // number of geoms
   int nsite;                      // number of sites
@@ -542,7 +543,8 @@ struct mjModel_ {
   int nlight;                     // number of lights
   int nmesh;                      // number of meshes
   int nmeshvert;                  // number of vertices in all meshes
-  int nmeshtexvert;               // number of vertices with texcoords in all meshes
+  int nmeshnormal;                // number of normals in all meshes
+  int nmeshtexcoord;              // number of texcoords in all meshes
   int nmeshface;                  // number of triangular faces in all meshes
   int nmeshgraph;                 // number of ints in mesh auxiliary data
   int nskin;                      // number of skins
@@ -581,10 +583,12 @@ struct mjModel_ {
   int nuser_actuator;             // number of mjtNums in actuator_user
   int nuser_sensor;               // number of mjtNums in sensor_user
   int nnames;                     // number of chars in all names
+  int nnames_map;                 // number of slots in the names hash map
 
   // sizes set after mjModel construction (only affect mjData)
   int nM;                         // number of non-zeros in sparse inertia matrix
-  int nD;                         // number of non-zeros in sparse derivative matrix
+  int nD;                         // number of non-zeros in sparse dof-dof matrix
+  int nB;                         // number of non-zeros in sparse body-dof matrix
   int nemax;                      // number of potential equality-constraint rows
   int njmax;                      // number of available rows in constraint Jacobian
   int nconmax;                    // number of potential contacts in contact list
@@ -634,6 +638,14 @@ struct mjModel_ {
   mjtNum*   body_gravcomp;        // antigravity force, units of body weight  (nbody x 1)
   mjtNum*   body_user;            // user data                                (nbody x nuser_body)
   int*      body_plugin;          // plugin instance id (-1 if not in use)    (nbody x 1)
+  int*      body_bvhadr;          // address of bvh root                      (nbody x 1)
+  int*      body_bvhnum;          // number of bounding volumes               (nbody x 1)
+
+  // bounding volume hierarchy
+  int*      bvh_depth;            // depth in the bounding volume hierarchy   (nbvh x 1)
+  int*      bvh_child;            // left and right children in tree          (nbvh x 2)
+  int*      bvh_geomid;           // geom id of the node (non-leaf: -1)       (nbvh x 1)
+  mjtNum*   bvh_aabb;             // bounding box of node (center, size)      (nbvh x 6)
 
   // joints
   int*      jnt_type;             // type of joint (mjtJoint)                 (njnt x 1)
@@ -680,6 +692,7 @@ struct mjModel_ {
   mjtNum*   geom_solref;          // constraint solver reference: contact     (ngeom x mjNREF)
   mjtNum*   geom_solimp;          // constraint solver impedance: contact     (ngeom x mjNIMP)
   mjtNum*   geom_size;            // geom-specific size parameters            (ngeom x 3)
+  mjtNum*   geom_aabb;            // bounding box, (center, size)             (ngeom x 6)
   mjtNum*   geom_rbound;          // radius of bounding sphere                (ngeom x 1)
   mjtNum*   geom_pos;             // local position offset rel. to body       (ngeom x 3)
   mjtNum*   geom_quat;            // local orientation offset rel. to body    (ngeom x 4)
@@ -737,14 +750,19 @@ struct mjModel_ {
   // meshes
   int*      mesh_vertadr;         // first vertex address                     (nmesh x 1)
   int*      mesh_vertnum;         // number of vertices                       (nmesh x 1)
-  int*      mesh_texcoordadr;     // texcoord data address; -1: no texcoord   (nmesh x 1)
   int*      mesh_faceadr;         // first face address                       (nmesh x 1)
   int*      mesh_facenum;         // number of faces                          (nmesh x 1)
+  int*      mesh_normaladr;       // first normal address                     (nmesh x 1)
+  int*      mesh_normalnum;       // number of normals                        (nmesh x 1)
+  int*      mesh_texcoordadr;     // texcoord data address; -1: no texcoord   (nmesh x 1)
+  int*      mesh_texcoordnum;     // number of texcoord                       (nmesh x 1)
   int*      mesh_graphadr;        // graph data address; -1: no graph         (nmesh x 1)
   float*    mesh_vert;            // vertex positions for all meshes          (nmeshvert x 3)
-  float*    mesh_normal;          // vertex normals for all meshes            (nmeshvert x 3)
-  float*    mesh_texcoord;        // vertex texcoords for all meshes          (nmeshtexvert x 2)
-  int*      mesh_face;            // triangle face data                       (nmeshface x 3)
+  float*    mesh_normal;          // normals for all meshes                   (nmeshnormal x 3)
+  float*    mesh_texcoord;        // vertex texcoords for all meshes          (nmeshtexcoord x 2)
+  int*      mesh_face;            // vertex face data                         (nmeshface x 3)
+  int*      mesh_facenormal;      // normal face data                         (nmeshface x 3)
+  int*      mesh_facetexcoord;    // texture face data                        (nmeshface x 3)
   int*      mesh_graph;           // convex graph data                        (nmeshgraph x 1)
 
   // skins
@@ -942,6 +960,7 @@ struct mjModel_ {
   int*      name_keyadr;          // keyframe name pointers                   (nkey x 1)
   int*      name_pluginadr;       // plugin instance name pointers            (nplugin x 1)
   char*     names;                // names of all objects, 0-terminated       (nnames x 1)
+  int*      names_map;            // internal hash map of names               (nnames_map x 1)
 };
 typedef struct mjModel_ mjModel;
 

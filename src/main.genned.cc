@@ -42,6 +42,7 @@ public:
   int  nu            () const { return m->nu            ; }
   int  na            () const { return m->na            ; }
   int  nbody         () const { return m->nbody         ; }
+  int  nbvh          () const { return m->nbvh          ; }
   int  njnt          () const { return m->njnt          ; }
   int  ngeom         () const { return m->ngeom         ; }
   int  nsite         () const { return m->nsite         ; }
@@ -49,7 +50,8 @@ public:
   int  nlight        () const { return m->nlight        ; }
   int  nmesh         () const { return m->nmesh         ; }
   int  nmeshvert     () const { return m->nmeshvert     ; }
-  int  nmeshtexvert  () const { return m->nmeshtexvert  ; }
+  int  nmeshnormal   () const { return m->nmeshnormal   ; }
+  int  nmeshtexcoord () const { return m->nmeshtexcoord ; }
   int  nmeshface     () const { return m->nmeshface     ; }
   int  nmeshgraph    () const { return m->nmeshgraph    ; }
   int  nskin         () const { return m->nskin         ; }
@@ -88,8 +90,10 @@ public:
   int  nuser_actuator() const { return m->nuser_actuator; }
   int  nuser_sensor  () const { return m->nuser_sensor  ; }
   int  nnames        () const { return m->nnames        ; }
+  int  nnames_map    () const { return m->nnames_map    ; }
   int  nM            () const { return m->nM            ; }
   int  nD            () const { return m->nD            ; }
+  int  nB            () const { return m->nB            ; }
   int  nemax         () const { return m->nemax         ; }
   int  njmax         () const { return m->njmax         ; }
   int  nconmax       () const { return m->nconmax       ; }
@@ -123,6 +127,12 @@ public:
   val  body_gravcomp          () const { return val(typed_memory_view(m->nbody           * 1        , m->body_gravcomp          )); }
   val  body_user              () const { return val(typed_memory_view(m->nbody           * m->nuser_body, m->body_user              )); }
   val  body_plugin            () const { return val(typed_memory_view(m->nbody           * 1        , m->body_plugin            )); }
+  val  body_bvhadr            () const { return val(typed_memory_view(m->nbody           * 1        , m->body_bvhadr            )); }
+  val  body_bvhnum            () const { return val(typed_memory_view(m->nbody           * 1        , m->body_bvhnum            )); }
+  val  bvh_depth              () const { return val(typed_memory_view(m->nbvh            * 1        , m->bvh_depth              )); }
+  val  bvh_child              () const { return val(typed_memory_view(m->nbvh            * 2        , m->bvh_child              )); }
+  val  bvh_geomid             () const { return val(typed_memory_view(m->nbvh            * 1        , m->bvh_geomid             )); }
+  val  bvh_aabb               () const { return val(typed_memory_view(m->nbvh            * 6        , m->bvh_aabb               )); }
   val  jnt_type               () const { return val(typed_memory_view(m->njnt            * 1        , m->jnt_type               )); }
   val  jnt_qposadr            () const { return val(typed_memory_view(m->njnt            * 1        , m->jnt_qposadr            )); }
   val  jnt_dofadr             () const { return val(typed_memory_view(m->njnt            * 1        , m->jnt_dofadr             )); }
@@ -163,6 +173,7 @@ public:
   val  geom_solref            () const { return val(typed_memory_view(m->ngeom           * mjNREF   , m->geom_solref            )); }
   val  geom_solimp            () const { return val(typed_memory_view(m->ngeom           * mjNIMP   , m->geom_solimp            )); }
   val  geom_size              () const { return val(typed_memory_view(m->ngeom           * 3        , m->geom_size              )); }
+  val  geom_aabb              () const { return val(typed_memory_view(m->ngeom           * 6        , m->geom_aabb              )); }
   val  geom_rbound            () const { return val(typed_memory_view(m->ngeom           * 1        , m->geom_rbound            )); }
   val  geom_pos               () const { return val(typed_memory_view(m->ngeom           * 3        , m->geom_pos               )); }
   val  geom_quat              () const { return val(typed_memory_view(m->ngeom           * 4        , m->geom_quat              )); }
@@ -212,14 +223,19 @@ public:
   val  light_specular         () const { return val(typed_memory_view(m->nlight          * 3        , m->light_specular         )); }
   val  mesh_vertadr           () const { return val(typed_memory_view(m->nmesh           * 1        , m->mesh_vertadr           )); }
   val  mesh_vertnum           () const { return val(typed_memory_view(m->nmesh           * 1        , m->mesh_vertnum           )); }
+  val  mesh_normaladr         () const { return val(typed_memory_view(m->nmesh           * 1        , m->mesh_normaladr         )); }
+  val  mesh_normalnum         () const { return val(typed_memory_view(m->nmesh           * 1        , m->mesh_normalnum         )); }
   val  mesh_texcoordadr       () const { return val(typed_memory_view(m->nmesh           * 1        , m->mesh_texcoordadr       )); }
+  val  mesh_texcoordnum       () const { return val(typed_memory_view(m->nmesh           * 1        , m->mesh_texcoordnum       )); }
   val  mesh_faceadr           () const { return val(typed_memory_view(m->nmesh           * 1        , m->mesh_faceadr           )); }
   val  mesh_facenum           () const { return val(typed_memory_view(m->nmesh           * 1        , m->mesh_facenum           )); }
   val  mesh_graphadr          () const { return val(typed_memory_view(m->nmesh           * 1        , m->mesh_graphadr          )); }
   val  mesh_vert              () const { return val(typed_memory_view(m->nmeshvert       * 3        , m->mesh_vert              )); }
-  val  mesh_normal            () const { return val(typed_memory_view(m->nmeshvert       * 3        , m->mesh_normal            )); }
-  val  mesh_texcoord          () const { return val(typed_memory_view(m->nmeshtexvert    * 2        , m->mesh_texcoord          )); }
+  val  mesh_normal            () const { return val(typed_memory_view(m->nmeshnormal     * 3        , m->mesh_normal            )); }
+  val  mesh_texcoord          () const { return val(typed_memory_view(m->nmeshtexcoord   * 2        , m->mesh_texcoord          )); }
   val  mesh_face              () const { return val(typed_memory_view(m->nmeshface       * 3        , m->mesh_face              )); }
+  val  mesh_facenormal        () const { return val(typed_memory_view(m->nmeshface       * 3        , m->mesh_facenormal        )); }
+  val  mesh_facetexcoord      () const { return val(typed_memory_view(m->nmeshface       * 3        , m->mesh_facetexcoord      )); }
   val  mesh_graph             () const { return val(typed_memory_view(m->nmeshgraph      * 1        , m->mesh_graph             )); }
   val  skin_matid             () const { return val(typed_memory_view(m->nskin           * 1        , m->skin_matid             )); }
   val  skin_group             () const { return val(typed_memory_view(m->nskin           * 1        , m->skin_group             )); }
@@ -383,6 +399,7 @@ public:
   val  name_keyadr            () const { return val(typed_memory_view(m->nkey            * 1        , m->name_keyadr            )); }
   val  name_pluginadr         () const { return val(typed_memory_view(m->nplugin         * 1        , m->name_pluginadr         )); }
   val  names                  () const { return val(typed_memory_view(m->nnames          * 1        , m->names                  )); }
+  val  names_map              () const { return val(typed_memory_view(m->nnames_map      * 1        , m->names_map              )); }
 
 private:
   mjModel *m;
@@ -530,6 +547,7 @@ public:
   val  qLD                    () const { return val(typed_memory_view(_model->ptr()->nM              * 1        , _state->ptr()->qLD                    )); }
   val  qLDiagInv              () const { return val(typed_memory_view(_model->ptr()->nv              * 1        , _state->ptr()->qLDiagInv              )); }
   val  qLDiagSqrtInv          () const { return val(typed_memory_view(_model->ptr()->nv              * 1        , _state->ptr()->qLDiagSqrtInv          )); }
+  val  bvh_active             () const { return val(typed_memory_view(_model->ptr()->nbvh            * 1        , _state->ptr()->bvh_active             )); }
   val  ten_velocity           () const { return val(typed_memory_view(_model->ptr()->ntendon         * 1        , _state->ptr()->ten_velocity           )); }
   val  actuator_velocity      () const { return val(typed_memory_view(_model->ptr()->nu              * 1        , _state->ptr()->actuator_velocity      )); }
   val  cvel                   () const { return val(typed_memory_view(_model->ptr()->nbody           * 6        , _state->ptr()->cvel                   )); }
@@ -543,6 +561,9 @@ public:
   val  D_rownnz               () const { return val(typed_memory_view(_model->ptr()->nv              * 1        , _state->ptr()->D_rownnz               )); }
   val  D_rowadr               () const { return val(typed_memory_view(_model->ptr()->nv              * 1        , _state->ptr()->D_rowadr               )); }
   val  D_colind               () const { return val(typed_memory_view(_model->ptr()->nD              * 1        , _state->ptr()->D_colind               )); }
+  val  B_rownnz               () const { return val(typed_memory_view(_model->ptr()->nbody           * 1        , _state->ptr()->B_rownnz               )); }
+  val  B_rowadr               () const { return val(typed_memory_view(_model->ptr()->nbody           * 1        , _state->ptr()->B_rowadr               )); }
+  val  B_colind               () const { return val(typed_memory_view(_model->ptr()->nB              * 1        , _state->ptr()->B_colind               )); }
   val  qDeriv                 () const { return val(typed_memory_view(_model->ptr()->nD              * 1        , _state->ptr()->qDeriv                 )); }
   val  qLU                    () const { return val(typed_memory_view(_model->ptr()->nD              * 1        , _state->ptr()->qLU                    )); }
   val  actuator_force         () const { return val(typed_memory_view(_model->ptr()->nu              * 1        , _state->ptr()->actuator_force         )); }
@@ -722,6 +743,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .value("mjDSBL_ACTUATION"       , mjtDisableBit            ::mjDSBL_ACTUATION         )
       .value("mjDSBL_REFSAFE"         , mjtDisableBit            ::mjDSBL_REFSAFE           )
       .value("mjDSBL_SENSOR"          , mjtDisableBit            ::mjDSBL_SENSOR            )
+      .value("mjDSBL_MIDPHASE"        , mjtDisableBit            ::mjDSBL_MIDPHASE          )
       .value("mjNDISABLE"             , mjtDisableBit            ::mjNDISABLE               )
   ;
   enum_<mjtEnableBit>("mjtEnableBit")
@@ -772,6 +794,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .value("mjINT_EULER"            , mjtIntegrator            ::mjINT_EULER              )
       .value("mjINT_RK4"              , mjtIntegrator            ::mjINT_RK4                )
       .value("mjINT_IMPLICIT"         , mjtIntegrator            ::mjINT_IMPLICIT           )
+      .value("mjINT_IMPLICITFAST"     , mjtIntegrator            ::mjINT_IMPLICITFAST       )
   ;
   enum_<mjtCollision>("mjtCollision")
       .value("mjCOL_ALL"              , mjtCollision             ::mjCOL_ALL                )
@@ -951,6 +974,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .property("nu"                    , &Model::nu                    )
       .property("na"                    , &Model::na                    )
       .property("nbody"                 , &Model::nbody                 )
+      .property("nbvh"                  , &Model::nbvh                  )
       .property("njnt"                  , &Model::njnt                  )
       .property("ngeom"                 , &Model::ngeom                 )
       .property("nsite"                 , &Model::nsite                 )
@@ -958,7 +982,8 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .property("nlight"                , &Model::nlight                )
       .property("nmesh"                 , &Model::nmesh                 )
       .property("nmeshvert"             , &Model::nmeshvert             )
-      .property("nmeshtexvert"          , &Model::nmeshtexvert          )
+      .property("nmeshnormal"           , &Model::nmeshnormal           )
+      .property("nmeshtexcoord"         , &Model::nmeshtexcoord         )
       .property("nmeshface"             , &Model::nmeshface             )
       .property("nmeshgraph"            , &Model::nmeshgraph            )
       .property("nskin"                 , &Model::nskin                 )
@@ -997,8 +1022,10 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .property("nuser_actuator"        , &Model::nuser_actuator        )
       .property("nuser_sensor"          , &Model::nuser_sensor          )
       .property("nnames"                , &Model::nnames                )
+      .property("nnames_map"            , &Model::nnames_map            )
       .property("nM"                    , &Model::nM                    )
       .property("nD"                    , &Model::nD                    )
+      .property("nB"                    , &Model::nB                    )
       .property("nemax"                 , &Model::nemax                 )
       .property("njmax"                 , &Model::njmax                 )
       .property("nconmax"               , &Model::nconmax               )
@@ -1032,6 +1059,12 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .property("body_gravcomp"         , &Model::body_gravcomp         )
       .property("body_user"             , &Model::body_user             )
       .property("body_plugin"           , &Model::body_plugin           )
+      .property("body_bvhadr"           , &Model::body_bvhadr           )
+      .property("body_bvhnum"           , &Model::body_bvhnum           )
+      .property("bvh_depth"             , &Model::bvh_depth             )
+      .property("bvh_child"             , &Model::bvh_child             )
+      .property("bvh_geomid"            , &Model::bvh_geomid            )
+      .property("bvh_aabb"              , &Model::bvh_aabb              )
       .property("jnt_type"              , &Model::jnt_type              )
       .property("jnt_qposadr"           , &Model::jnt_qposadr           )
       .property("jnt_dofadr"            , &Model::jnt_dofadr            )
@@ -1072,6 +1105,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .property("geom_solref"           , &Model::geom_solref           )
       .property("geom_solimp"           , &Model::geom_solimp           )
       .property("geom_size"             , &Model::geom_size             )
+      .property("geom_aabb"             , &Model::geom_aabb             )
       .property("geom_rbound"           , &Model::geom_rbound           )
       .property("geom_pos"              , &Model::geom_pos              )
       .property("geom_quat"             , &Model::geom_quat             )
@@ -1121,7 +1155,10 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .property("light_specular"        , &Model::light_specular        )
       .property("mesh_vertadr"          , &Model::mesh_vertadr          )
       .property("mesh_vertnum"          , &Model::mesh_vertnum          )
+      .property("mesh_normaladr"        , &Model::mesh_normaladr        )
+      .property("mesh_normalnum"        , &Model::mesh_normalnum        )
       .property("mesh_texcoordadr"      , &Model::mesh_texcoordadr      )
+      .property("mesh_texcoordnum"      , &Model::mesh_texcoordnum      )
       .property("mesh_faceadr"          , &Model::mesh_faceadr          )
       .property("mesh_facenum"          , &Model::mesh_facenum          )
       .property("mesh_graphadr"         , &Model::mesh_graphadr         )
@@ -1129,6 +1166,8 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .property("mesh_normal"           , &Model::mesh_normal           )
       .property("mesh_texcoord"         , &Model::mesh_texcoord         )
       .property("mesh_face"             , &Model::mesh_face             )
+      .property("mesh_facenormal"       , &Model::mesh_facenormal       )
+      .property("mesh_facetexcoord"     , &Model::mesh_facetexcoord     )
       .property("mesh_graph"            , &Model::mesh_graph            )
       .property("skin_matid"            , &Model::skin_matid            )
       .property("skin_group"            , &Model::skin_group            )
@@ -1292,6 +1331,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .property("name_keyadr"           , &Model::name_keyadr           )
       .property("name_pluginadr"        , &Model::name_pluginadr        )
       .property("names"                 , &Model::names                 )
+      .property("names_map"             , &Model::names_map             )
 ;
 
   class_<State>("State")
@@ -1356,6 +1396,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .property("qLD"                   , &Simulation::qLD                   )
       .property("qLDiagInv"             , &Simulation::qLDiagInv             )
       .property("qLDiagSqrtInv"         , &Simulation::qLDiagSqrtInv         )
+      .property("bvh_active"            , &Simulation::bvh_active            )
       .property("ten_velocity"          , &Simulation::ten_velocity          )
       .property("actuator_velocity"     , &Simulation::actuator_velocity     )
       .property("cvel"                  , &Simulation::cvel                  )
@@ -1369,6 +1410,9 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .property("D_rownnz"              , &Simulation::D_rownnz              )
       .property("D_rowadr"              , &Simulation::D_rowadr              )
       .property("D_colind"              , &Simulation::D_colind              )
+      .property("B_rownnz"              , &Simulation::B_rownnz              )
+      .property("B_rowadr"              , &Simulation::B_rowadr              )
+      .property("B_colind"              , &Simulation::B_colind              )
       .property("qDeriv"                , &Simulation::qDeriv                )
       .property("qLU"                   , &Simulation::qLU                   )
       .property("actuator_force"        , &Simulation::actuator_force        )
@@ -1569,7 +1613,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .field("timeconst"  , &mjLROpt::timeconst)  // time constant for velocity reduction; min 0.01
       .field("timestep"   , &mjLROpt::timestep)   // simulation timestep; 0: use mjOption.timestep
       .field("inttotal"   , &mjLROpt::inttotal)   // total simulation time interval
-      .field("inteval"    , &mjLROpt::inteval)    // evaluation time interval (at the end)
+      .field("interval"   , &mjLROpt::interval)   // evaluation time interval (at the end)
       .field("tolrange"   , &mjLROpt::tolrange);  // convergence tolerance (relative to range)
 
   value_object<mjOption>("mjOption")

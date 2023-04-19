@@ -75,6 +75,7 @@ typedef enum mjtLabel_ {          // object labeling
   mjLABEL_SKIN,                   // skin labels
   mjLABEL_SELECTION,              // selected object
   mjLABEL_SELPNT,                 // coordinates of selection point
+  mjLABEL_CONTACTPOINT,           // contact information
   mjLABEL_CONTACTFORCE,           // magnitude of contact force
 
   mjNLABEL                        // number of label types
@@ -119,6 +120,7 @@ typedef enum mjtVisFlag_ {        // flags enabling model element visualization
   mjVIS_SELECT,                   // selection point
   mjVIS_STATIC,                   // static bodies
   mjVIS_SKIN,                     // skin
+  mjVIS_MIDPHASE,                 // mid-phase bounding volume hierarchy
 
   mjNVISFLAG                      // number of visualization flags
 } mjtVisFlag;
@@ -154,9 +156,11 @@ struct mjvPerturb_ {              // object selection and perturbation
   int      skinselect;            // selected skin id; negative: none
   int      active;                // perturbation bitmask (mjtPertBit)
   int      active2;               // secondary perturbation bitmask (mjtPertBit)
-  mjtNum   refpos[3];             // desired position for selected object
-  mjtNum   refquat[4];            // desired orientation for selected object
+  mjtNum   refpos[3];             // reference position for selected object
+  mjtNum   refquat[4];            // reference orientation for selected object
+  mjtNum   refselpos[3];          // reference position for selection point
   mjtNum   localpos[3];           // selection point in object coordinates
+  mjtNum   localmass;             // spatial inertia at selection point
   mjtNum   scale;                 // relative mouse motion-to-space scaling (set by initPerturb)
 };
 typedef struct mjvPerturb_ mjvPerturb;
