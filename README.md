@@ -16,15 +16,19 @@
 
 ## The Power of MuJoCo in your Browser.
 
-Load and Run MuJoCo 2.3.1 Models using JavaScript and WebAssembly.
+MuJoCo built with emscripten for use in JavaScript and WebAssembly. This includes `MuJoCo v2.3.3` built as static library and a simple example application.
 
-This repo is a fork of @stillonearth 's starter repository, adding tons of functionality and a comprehensive example scene.
+This repo is a fork of @stillonearth 's emscripten compilation repository, adding tons of functionality and a comprehensive example scene.
 
 ### [See the Live Demo Here](https://zalo.github.io/mujoco_wasm/)
 
 ### [See a more Advanced Example Here](https://kzakka.com/robopianist/)
 
 ## Building
+
+**0. (Optional) Build MuJoCo libs with WASM targets**
+
+This repo includes built MuJoCo libs for `v2.3.3`. If you want to build your own, follow the [instructions](https://github.com/stillonearth/MuJoCo-WASM/issues/1#issuecomment-1495814568).
 
 **1. Install emscripten**
 
@@ -42,7 +46,7 @@ On Windows, run `build_windows.bat`.
 
 *3. (Optional) Update MuJoCo libs*
 
-Build MuJoCo libs with wasm target and place to lib. Currently v2.3.1 included.
+Build MuJoCo libs with wasm target and place to lib. Currently v2.3.3 included.
 
 ## JavaScript API
 
