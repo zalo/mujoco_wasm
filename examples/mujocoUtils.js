@@ -29,7 +29,8 @@ export function setupGUI(parentContext) {
   parentContext.gui.add(parentContext.params, 'scene', {
     "Humanoid": "humanoid.xml", "Cassie": "agility_cassie/scene.xml",
     "Hammock": "hammock.xml", "Balloons": "balloons.xml", "Hand": "shadow_hand/scene_right.xml",
-    "Flag": "flag.xml", "Mug": "mug.xml", "Tendon": "model_with_tendon.xml"
+    "Flag": "flag.xml", "Mug": "mug.xml", "Tendon": "model_with_tendon.xml",
+    "3x3x3 Cube": "cube/cube_3x3x3.xml",
   }).name('Example Scene').onChange(reload);
 
   // Add a help menu.
@@ -249,7 +250,7 @@ export function setupGUI(parentContext) {
       // TODO: Use free camera parameters from MuJoCo
       parentContext.camera.position.set(2.0, 1.7, 1.7);
       parentContext.controls.target.set(0, 0.7, 0);
-      parentContext.controls.update(); 
+      parentContext.controls.update();
       event.preventDefault();
     }
   });
@@ -523,7 +524,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         bodies[0].add(bodies[b]);
       }
     }
-  
+
     parent.mujocoRoot = mujocoRoot;
 
     return [model, state, simulation, bodies, lights]
@@ -582,6 +583,34 @@ export async function downloadExampleScenesFolder(mujoco) {
     "simple.xml",
     "slider_crank.xml",
     "model_with_tendon.xml",
+    "cube/assets/blue.png",
+    "cube/assets/blue_orange.png",
+    "cube/assets/blue_orange_white.png",
+    "cube/assets/blue_orange_yellow.png",
+    "cube/assets/blue_red.png",
+    "cube/assets/blue_red_white.png",
+    "cube/assets/blue_red_yellow.png",
+    "cube/assets/blue_white.png",
+    "cube/assets/blue_yellow.png",
+    "cube/assets/green.png",
+    "cube/assets/green_orange.png",
+    "cube/assets/green_orange_white.png",
+    "cube/assets/green_orange_yellow.png",
+    "cube/assets/green_red.png",
+    "cube/assets/green_red_white.png",
+    "cube/assets/green_red_yellow.png",
+    "cube/assets/green_white.png",
+    "cube/assets/green_yellow.png",
+    "cube/assets/orange.png",
+    "cube/assets/orange_red.png",
+    "cube/assets/orange_white.png",
+    "cube/assets/orange_yellow.png",
+    "cube/assets/red.png",
+    "cube/assets/red_white.png",
+    "cube/assets/red_yellow.png",
+    "cube/assets/white.png",
+    "cube/assets/yellow.png",
+    "cube/cube_3x3x3.xml",
   ];
 
   let requests = allFiles.map((url) => fetch("./examples/scenes/" + url));
