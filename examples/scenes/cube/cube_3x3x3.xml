@@ -1,6 +1,6 @@
 <mujoco model="Cube 3x3x3">
   <compiler autolimits="true" angle="radian" texturedir="assets"/>
-  <option timestep="0.01" integrator="implicitfast"/>
+  <option timestep="0.01"/>
   <size memory="600K"/>
   <visual>
     <global azimuth="180" elevation="-20"/>
