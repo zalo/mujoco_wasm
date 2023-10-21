@@ -304,6 +304,8 @@ export enum mjtDisableBit {
     mjDSBL_REFSAFE           ,
     /** sensors                                  */
     mjDSBL_SENSOR            ,
+    /** mid-phase collision filtering            */
+    mjDSBL_MIDPHASE          ,
     /** number of disable flags                  */
     mjNDISABLE               ,
 }
@@ -398,6 +400,8 @@ export enum mjtIntegrator {
     mjINT_RK4                ,
     /** implicit in velocity                     */
     mjINT_IMPLICIT           ,
+    /** implicit in velocity, no rne derivative  */
+    mjINT_IMPLICITFAST       ,
 }
 /**  collision mode for selecting geom pairs */
 export enum mjtCollision {
@@ -729,6 +733,8 @@ export interface Model {
   na                    :       number;
   /** number of bodies*/
   nbody                 :       number;
+  /** number of total bounding volumes in all bodies*/
+  nbvh                  :       number;
   /** number of joints*/
   njnt                  :       number;
   /** number of geoms*/
@@ -743,8 +749,10 @@ export interface Model {
   nmesh                 :       number;
   /** number of vertices in all meshes*/
   nmeshvert             :       number;
-  /** number of vertices with texcoords in all meshes*/
-  nmeshtexvert          :       number;
+  /** number of normals in all meshes*/
+  nmeshnormal           :       number;
+  /** number of texcoords in all meshes*/
+  nmeshtexcoord         :       number;
   /** number of triangular faces in all meshes*/
   nmeshface             :       number;
   /** number of ints in mesh auxiliary data*/
@@ -821,10 +829,14 @@ export interface Model {
   nuser_sensor          :       number;
   /** number of chars in all names*/
   nnames                :       number;
+  /** number of slots in the names hash map*/
+  nnames_map            :       number;
   /** number of non-zeros in sparse inertia matrix*/
   nM                    :       number;
-  /** number of non-zeros in sparse derivative matrix*/
+  /** number of non-zeros in sparse dof-dof matrix*/
   nD                    :       number;
+  /** number of non-zeros in sparse body-dof matrix*/
+  nB                    :       number;
   /** number of potential equality-constraint rows*/
   nemax                 :       number;
   /** number of available rows in constraint Jacobian*/
@@ -889,8 +901,20 @@ export interface Model {
   body_gravcomp         : Float64Array;
   /** user data                                (nbody x nuser_body)*/
   body_user             : Float64Array;
-  /** plugin instance id (-1 if not in use)    (nbody x 1)*/
+  /** plugin instance id; -1: not in use       (nbody x 1)*/
   body_plugin           :   Int32Array;
+  /** address of bvh root                      (nbody x 1)*/
+  body_bvhadr           :   Int32Array;
+  /** number of bounding volumes               (nbody x 1)*/
+  body_bvhnum           :   Int32Array;
+  /** depth in the bounding volume hierarchy   (nbvh x 1)*/
+  bvh_depth             :   Int32Array;
+  /** left and right children in tree          (nbvh x 2)*/
+  bvh_child             :   Int32Array;
+  /** geom id of the node; -1: non-leaf        (nbvh x 1)*/
+  bvh_geomid            :   Int32Array;
+  /** bounding box of node (center, size)      (nbvh x 6)*/
+  bvh_aabb              : Float64Array;
   /** type of joint (mjtJoint)                 (njnt x 1)*/
   jnt_type              :   Int32Array;
   /** start addr in 'qpos' for joint's data    (njnt x 1)*/
@@ -953,9 +977,9 @@ export interface Model {
   geom_condim           :   Int32Array;
   /** id of geom's body                        (ngeom x 1)*/
   geom_bodyid           :   Int32Array;
-  /** id of geom's mesh/hfield (-1: none)      (ngeom x 1)*/
+  /** id of geom's mesh/hfield; -1: none       (ngeom x 1)*/
   geom_dataid           :   Int32Array;
-  /** material id for rendering                (ngeom x 1)*/
+  /** material id for rendering; -1: none      (ngeom x 1)*/
   geom_matid            :   Int32Array;
   /** group for visibility                     (ngeom x 1)*/
   geom_group            :   Int32Array;
@@ -971,6 +995,8 @@ export interface Model {
   geom_solimp           : Float64Array;
   /** geom-specific size parameters            (ngeom x 3)*/
   geom_size             : Float64Array;
+  /** bounding box, (center, size)             (ngeom x 6)*/
+  geom_aabb             : Float64Array;
   /** radius of bounding sphere                (ngeom x 1)*/
   geom_rbound           : Float64Array;
   /** local position offset rel. to body       (ngeom x 3)*/
@@ -993,7 +1019,7 @@ export interface Model {
   site_type             :   Int32Array;
   /** id of site's body                        (nsite x 1)*/
   site_bodyid           :   Int32Array;
-  /** material id for rendering                (nsite x 1)*/
+  /** material id for rendering; -1: none      (nsite x 1)*/
   site_matid            :   Int32Array;
   /** group for visibility                     (nsite x 1)*/
   site_group            :   Int32Array;
@@ -1069,8 +1095,14 @@ export interface Model {
   mesh_vertadr          :   Int32Array;
   /** number of vertices                       (nmesh x 1)*/
   mesh_vertnum          :   Int32Array;
+  /** first normal address                     (nmesh x 1)*/
+  mesh_normaladr        :   Int32Array;
+  /** number of normals                        (nmesh x 1)*/
+  mesh_normalnum        :   Int32Array;
   /** texcoord data address; -1: no texcoord   (nmesh x 1)*/
   mesh_texcoordadr      :   Int32Array;
+  /** number of texcoord                       (nmesh x 1)*/
+  mesh_texcoordnum      :   Int32Array;
   /** first face address                       (nmesh x 1)*/
   mesh_faceadr          :   Int32Array;
   /** number of faces                          (nmesh x 1)*/
@@ -1079,12 +1111,16 @@ export interface Model {
   mesh_graphadr         :   Int32Array;
   /** vertex positions for all meshes          (nmeshvert x 3)*/
   mesh_vert             : Float32Array;
-  /** vertex normals for all meshes            (nmeshvert x 3)*/
+  /** normals for all meshes                   (nmeshnormal x 3)*/
   mesh_normal           : Float32Array;
-  /** vertex texcoords for all meshes          (nmeshtexvert x 2)*/
+  /** vertex texcoords for all meshes          (nmeshtexcoord x 2)*/
   mesh_texcoord         : Float32Array;
-  /** triangle face data                       (nmeshface x 3)*/
+  /** vertex face data                         (nmeshface x 3)*/
   mesh_face             :   Int32Array;
+  /** normal face data                         (nmeshface x 3)*/
+  mesh_facenormal       :   Int32Array;
+  /** texture face data                        (nmeshface x 3)*/
+  mesh_facetexcoord     :   Int32Array;
   /** convex graph data                        (nmeshgraph x 1)*/
   mesh_graph            :   Int32Array;
   /** skin material id; -1: none               (nskin x 1)*/
@@ -1171,7 +1207,7 @@ export interface Model {
   pair_geom1            :   Int32Array;
   /** id of geom2                              (npair x 1)*/
   pair_geom2            :   Int32Array;
-  /** (body1+1)<<16 + body2+1                  (npair x 1)*/
+  /** (body1+1) << 16 + body2+1                (npair x 1)*/
   pair_signature        :   Int32Array;
   /** constraint solver reference: contact     (npair x mjNREF)*/
   pair_solref           : Float64Array;
@@ -1183,7 +1219,7 @@ export interface Model {
   pair_gap              : Float64Array;
   /** tangent1, 2, spin, roll1, 2              (npair x 5)*/
   pair_friction         : Float64Array;
-  /** (body1+1)<<16 + body2+1                  (nexclude x 1)*/
+  /** (body1+1) << 16 + body2+1                (nexclude x 1)*/
   exclude_signature     :   Int32Array;
   /** constraint type (mjtEq)                  (neq x 1)*/
   eq_type               :   Int32Array;
@@ -1319,7 +1355,7 @@ export interface Model {
   sensor_user           : Float64Array;
   /** plugin instance id; -1: not a plugin     (nsensor x 1)*/
   sensor_plugin         :   Int32Array;
-  /** plugin instance id (-1 if not in use)    (nbody x 1)*/
+  /** plugin instance id; -1: not in use       (nbody x 1)*/
   plugin                :   Int32Array;
   /** address in the plugin state array        (nplugin x 1)*/
   plugin_stateadr       :   Int32Array;
@@ -1411,6 +1447,8 @@ export interface Model {
   name_pluginadr        :   Int32Array;
   /** names of all objects, 0-terminated       (nnames x 1)*/
   names                 :   Uint8Array;
+  /** internal hash map of names               (nnames_map x 1)*/
+  names_map             :   Int32Array;
 }
 
 export interface State {
@@ -1435,153 +1473,161 @@ export interface Simulation {
             refQuat1: number, refQuat2: number, refQuat3: number, refQuat4: number,
             flg_paused: number): void;
   // DATA_INTERFACE
-  /** position                                 (nq x 1)*/
+  /** position                                         (nq x 1)*/
   qpos                  : Float64Array;
-  /** velocity                                 (nv x 1)*/
+  /** velocity                                         (nv x 1)*/
   qvel                  : Float64Array;
-  /** actuator activation                      (na x 1)*/
+  /** actuator activation                              (na x 1)*/
   act                   : Float64Array;
-  /** acceleration used for warmstart          (nv x 1)*/
+  /** acceleration used for warmstart                  (nv x 1)*/
   qacc_warmstart        : Float64Array;
-  /** plugin state                             (npluginstate x 1)*/
+  /** plugin state                                     (npluginstate x 1)*/
   plugin_state          : Float64Array;
-  /** control                                  (nu x 1)*/
+  /** control                                          (nu x 1)*/
   ctrl                  : Float64Array;
-  /** applied generalized force                (nv x 1)*/
+  /** applied generalized force                        (nv x 1)*/
   qfrc_applied          : Float64Array;
-  /** applied Cartesian force/torque           (nbody x 6)*/
+  /** applied Cartesian force/torque                   (nbody x 6)*/
   xfrc_applied          : Float64Array;
-  /** positions of mocap bodies                (nmocap x 3)*/
+  /** positions of mocap bodies                        (nmocap x 3)*/
   mocap_pos             : Float64Array;
-  /** orientations of mocap bodies             (nmocap x 4)*/
+  /** orientations of mocap bodies                     (nmocap x 4)*/
   mocap_quat            : Float64Array;
-  /** acceleration                             (nv x 1)*/
+  /** acceleration                                     (nv x 1)*/
   qacc                  : Float64Array;
-  /** time-derivative of actuator activation   (na x 1)*/
+  /** time-derivative of actuator activation           (na x 1)*/
   act_dot               : Float64Array;
-  /** user data, not touched by engine         (nuserdata x 1)*/
+  /** user data, not touched by engine                 (nuserdata x 1)*/
   userdata              : Float64Array;
-  /** sensor data array                        (nsensordata x 1)*/
+  /** sensor data array                                (nsensordata x 1)*/
   sensordata            : Float64Array;
-  /** copy of m->plugin, required for deletion (nplugin x 1)*/
+  /** copy of m->plugin, required for deletion         (nplugin x 1)*/
   plugin                :   Int32Array;
-  /** pointer to plugin-managed data structure (nplugin x 1)*/
+  /** pointer to plugin-managed data structure         (nplugin x 1)*/
   plugin_data           : BigUint64Array;
-  /** Cartesian position of body frame         (nbody x 3)*/
+  /** Cartesian position of body frame                 (nbody x 3)*/
   xpos                  : Float64Array;
-  /** Cartesian orientation of body frame      (nbody x 4)*/
+  /** Cartesian orientation of body frame              (nbody x 4)*/
   xquat                 : Float64Array;
-  /** Cartesian orientation of body frame      (nbody x 9)*/
+  /** Cartesian orientation of body frame              (nbody x 9)*/
   xmat                  : Float64Array;
-  /** Cartesian position of body com           (nbody x 3)*/
+  /** Cartesian position of body com                   (nbody x 3)*/
   xipos                 : Float64Array;
-  /** Cartesian orientation of body inertia    (nbody x 9)*/
+  /** Cartesian orientation of body inertia            (nbody x 9)*/
   ximat                 : Float64Array;
-  /** Cartesian position of joint anchor       (njnt x 3)*/
+  /** Cartesian position of joint anchor               (njnt x 3)*/
   xanchor               : Float64Array;
-  /** Cartesian joint axis                     (njnt x 3)*/
+  /** Cartesian joint axis                             (njnt x 3)*/
   xaxis                 : Float64Array;
-  /** Cartesian geom position                  (ngeom x 3)*/
+  /** Cartesian geom position                          (ngeom x 3)*/
   geom_xpos             : Float64Array;
-  /** Cartesian geom orientation               (ngeom x 9)*/
+  /** Cartesian geom orientation                       (ngeom x 9)*/
   geom_xmat             : Float64Array;
-  /** Cartesian site position                  (nsite x 3)*/
+  /** Cartesian site position                          (nsite x 3)*/
   site_xpos             : Float64Array;
-  /** Cartesian site orientation               (nsite x 9)*/
+  /** Cartesian site orientation                       (nsite x 9)*/
   site_xmat             : Float64Array;
-  /** Cartesian camera position                (ncam x 3)*/
+  /** Cartesian camera position                        (ncam x 3)*/
   cam_xpos              : Float64Array;
-  /** Cartesian camera orientation             (ncam x 9)*/
+  /** Cartesian camera orientation                     (ncam x 9)*/
   cam_xmat              : Float64Array;
-  /** Cartesian light position                 (nlight x 3)*/
+  /** Cartesian light position                         (nlight x 3)*/
   light_xpos            : Float64Array;
-  /** Cartesian light direction                (nlight x 3)*/
+  /** Cartesian light direction                        (nlight x 3)*/
   light_xdir            : Float64Array;
-  /** center of mass of each subtree           (nbody x 3)*/
+  /** center of mass of each subtree                   (nbody x 3)*/
   subtree_com           : Float64Array;
-  /** com-based motion axis of each dof        (nv x 6)*/
+  /** com-based motion axis of each dof                (nv x 6)*/
   cdof                  : Float64Array;
-  /** com-based body inertia and mass          (nbody x 10)*/
+  /** com-based body inertia and mass                  (nbody x 10)*/
   cinert                : Float64Array;
-  /** start address of tendon's path           (ntendon x 1)*/
+  /** start address of tendon's path                   (ntendon x 1)*/
   ten_wrapadr           :   Int32Array;
-  /** number of wrap points in path            (ntendon x 1)*/
+  /** number of wrap points in path                    (ntendon x 1)*/
   ten_wrapnum           :   Int32Array;
-  /** number of non-zeros in Jacobian row      (ntendon x 1)*/
+  /** number of non-zeros in Jacobian row              (ntendon x 1)*/
   ten_J_rownnz          :   Int32Array;
-  /** row start address in colind array        (ntendon x 1)*/
+  /** row start address in colind array                (ntendon x 1)*/
   ten_J_rowadr          :   Int32Array;
-  /** column indices in sparse Jacobian        (ntendon x nv)*/
+  /** column indices in sparse Jacobian                (ntendon x nv)*/
   ten_J_colind          :   Int32Array;
-  /** tendon lengths                           (ntendon x 1)*/
+  /** tendon lengths                                   (ntendon x 1)*/
   ten_length            : Float64Array;
-  /** tendon Jacobian                          (ntendon x nv)*/
+  /** tendon Jacobian                                  (ntendon x nv)*/
   ten_J                 : Float64Array;
-  /** geom id; -1: site; -2: pulley            (nwrap*2 x 1)*/
+  /** geom id; -1: site; -2: pulley                    (nwrap*2 x 1)*/
   wrap_obj              :   Int32Array;
-  /** Cartesian 3D points in all path          (nwrap*2 x 3)*/
+  /** Cartesian 3D points in all path                  (nwrap*2 x 3)*/
   wrap_xpos             : Float64Array;
-  /** actuator lengths                         (nu x 1)*/
+  /** actuator lengths                                 (nu x 1)*/
   actuator_length       : Float64Array;
-  /** actuator moments                         (nu x nv)*/
+  /** actuator moments                                 (nu x nv)*/
   actuator_moment       : Float64Array;
-  /** com-based composite inertia and mass     (nbody x 10)*/
+  /** com-based composite inertia and mass             (nbody x 10)*/
   crb                   : Float64Array;
-  /** total inertia (sparse)                   (nM x 1)*/
+  /** total inertia (sparse)                           (nM x 1)*/
   qM                    : Float64Array;
-  /** L'*D*L factorization of M (sparse)       (nM x 1)*/
+  /** L'*D*L factorization of M (sparse)               (nM x 1)*/
   qLD                   : Float64Array;
-  /** 1/diag(D)                                (nv x 1)*/
+  /** 1/diag(D)                                        (nv x 1)*/
   qLDiagInv             : Float64Array;
-  /** 1/sqrt(diag(D))                          (nv x 1)*/
+  /** 1/sqrt(diag(D))                                  (nv x 1)*/
   qLDiagSqrtInv         : Float64Array;
-  /** tendon velocities                        (ntendon x 1)*/
+  /** volume has been added to collisions              (nbvh x 1)*/
+  bvh_active            :   Uint8Array;
+  /** tendon velocities                                (ntendon x 1)*/
   ten_velocity          : Float64Array;
-  /** actuator velocities                      (nu x 1)*/
+  /** actuator velocities                              (nu x 1)*/
   actuator_velocity     : Float64Array;
-  /** com-based velocity [3D rot; 3D tran]     (nbody x 6)*/
+  /** com-based velocity [3D rot; 3D tran]             (nbody x 6)*/
   cvel                  : Float64Array;
-  /** time-derivative of cdof                  (nv x 6)*/
+  /** time-derivative of cdof                          (nv x 6)*/
   cdof_dot              : Float64Array;
-  /** C(qpos,qvel)                             (nv x 1)*/
+  /** C(qpos,qvel)                                     (nv x 1)*/
   qfrc_bias             : Float64Array;
-  /** passive force                            (nv x 1)*/
+  /** passive force                                    (nv x 1)*/
   qfrc_passive          : Float64Array;
-  /** linear velocity of subtree com           (nbody x 3)*/
+  /** linear velocity of subtree com                   (nbody x 3)*/
   subtree_linvel        : Float64Array;
-  /** angular momentum about subtree com       (nbody x 3)*/
+  /** angular momentum about subtree com               (nbody x 3)*/
   subtree_angmom        : Float64Array;
-  /** L'*D*L factorization of modified M       (nM x 1)*/
+  /** L'*D*L factorization of modified M               (nM x 1)*/
   qH                    : Float64Array;
-  /** 1/diag(D) of modified M                  (nv x 1)*/
+  /** 1/diag(D) of modified M                          (nv x 1)*/
   qHDiagInv             : Float64Array;
-  /** non-zeros in each row                    (nv x 1)*/
+  /** non-zeros in each row                            (nv x 1)*/
   D_rownnz              :   Int32Array;
-  /** address of each row in D_colind          (nv x 1)*/
+  /** address of each row in D_colind                  (nv x 1)*/
   D_rowadr              :   Int32Array;
-  /** column indices of non-zeros              (nD x 1)*/
+  /** column indices of non-zeros                      (nD x 1)*/
   D_colind              :   Int32Array;
-  /** d (passive + actuator - bias) / d qvel   (nD x 1)*/
+  /** non-zeros in each row                            (nbody x 1)*/
+  B_rownnz              :   Int32Array;
+  /** address of each row in B_colind                  (nbody x 1)*/
+  B_rowadr              :   Int32Array;
+  /** column indices of non-zeros                      (nB x 1)*/
+  B_colind              :   Int32Array;
+  /** d (passive + actuator - bias) / d qvel           (nD x 1)*/
   qDeriv                : Float64Array;
-  /** sparse LU of (qM - dt*qDeriv)            (nD x 1)*/
+  /** sparse LU of (qM - dt*qDeriv)                    (nD x 1)*/
   qLU                   : Float64Array;
-  /** actuator force in actuation space        (nu x 1)*/
+  /** actuator force in actuation space                (nu x 1)*/
   actuator_force        : Float64Array;
-  /** actuator force                           (nv x 1)*/
+  /** actuator force                                   (nv x 1)*/
   qfrc_actuator         : Float64Array;
-  /** net unconstrained force                  (nv x 1)*/
+  /** net unconstrained force                          (nv x 1)*/
   qfrc_smooth           : Float64Array;
-  /** unconstrained acceleration               (nv x 1)*/
+  /** unconstrained acceleration                       (nv x 1)*/
   qacc_smooth           : Float64Array;
-  /** constraint force                         (nv x 1)*/
+  /** constraint force                                 (nv x 1)*/
   qfrc_constraint       : Float64Array;
-  /** net external force; should equal:        (nv x 1)*/
+  /** net external force; should equal:                (nv x 1)*/
   qfrc_inverse          : Float64Array;
-  /** com-based acceleration                   (nbody x 6)*/
+  /** com-based acceleration                           (nbody x 6)*/
   cacc                  : Float64Array;
-  /** com-based interaction force with parent  (nbody x 6)*/
+  /** com-based interaction force with parent          (nbody x 6)*/
   cfrc_int              : Float64Array;
-  /** com-based external force on body         (nbody x 6)*/
+  /** com-based external force on body                 (nbody x 6)*/
   cfrc_ext              : Float64Array;
   /** Free last XML model if loaded. Called internally at each load.*/
   freeLastXML           (): void;
