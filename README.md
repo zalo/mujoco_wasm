@@ -1,8 +1,31 @@
-# MuJoCo-WASM
+<p align="center">
+  <a href="https://zalo.github.io/mujoco_wasm/"><img src="./examples/MuJoCoWasmLogo.png" href></a>
+</p>
+<p align="left">
+  <a href="https://github.com/zalo/mujoco_wasm/deployments/activity_log?environment=github-pages">
+      <img src="https://img.shields.io/github/deployments/zalo/mujoco_wasm/github-pages?label=Github%20Pages%20Deployment" title="Github Pages Deployment"></a>
+  <!--<a href="https://github.com/zalo/mujoco_wasm/deployments/activity_log?environment=Production">
+      <img src="https://img.shields.io/github/deployments/zalo/mujoco_wasm/Production?label=Vercel%20Deployment" title="Vercel Deployment"></a> -->
+  <!--<a href="https://lgtm.com/projects/g/zalo/mujoco_wasm/context:javascript">
+      <img alt="Language grade: JavaScript" src="https://img.shields.io/lgtm/grade/javascript/g/zalo/mujoco_wasm.svg?logo=lgtm&logoWidth=18"/></a> -->
+  <a href="https://github.com/zalo/mujoco_wasm/commits/main">
+      <img src="https://img.shields.io/github/last-commit/zalo/mujoco_wasm" title="Last Commit Date"></a>
+  <a href="https://github.com/zalo/mujoco_wasm/blob/main/LICENSE">
+      <img src="https://img.shields.io/badge/license-MIT-brightgreen" title="License: MIT"></a>
+</p>
 
-MuJoCo built with emscripten for use in JavaScript and WebAssembly. This includes `MuJoCo v2.3.3` built as static library and a simple example application.
 
-## Usage
+## The Power of MuJoCo in your Browser.
+
+Load and Run MuJoCo 2.3.1 Models using JavaScript and WebAssembly.
+
+This repo is a fork of @stillonearth 's starter repository, adding tons of functionality and a comprehensive example scene.
+
+### [See the Live Demo Here](https://zalo.github.io/mujoco_wasm/)
+
+### [See a more Advanced Example Here](https://kzakka.com/robopianist/)
+
+## Building
 
 **0. (Optional) Build MuJoCo libs with WASM targets**
 
@@ -10,8 +33,9 @@ This repo includes built MuJoCo libs for `v2.3.3`. If you want to build your own
 
 **1. Install emscripten**
 
-**2. Build MuJoCo-WASM application**
+**2. Build the mujoco_wasm Binary**
 
+On Linux, use:
 ```bash
 mkdir build
 cd build
@@ -19,65 +43,35 @@ emcmake cmake ..
 make
 ```
 
+On Windows, run `build_windows.bat`.
+
+*3. (Optional) Update MuJoCo libs*
+
+Build MuJoCo libs with wasm target and place to lib. Currently v2.3.1 included.
+
 ## JavaScript API
 
-```bash
-npm install mujoco-wasm --save
-```
-
 ```javascript
-import { Model, Simulation, State, downloadFile } from "mujoco-wasm";
+import load_mujoco from "./mujoco_wasm.js";
+
+// Load the MuJoCo Module
+const mujoco = await load_mujoco();
+
+// Set up Emscripten's Virtual File System
+mujoco.FS.mkdir('/working');
+mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
+mujoco.FS.writeFile("/working/humanoid.xml", await (await fetch("./examples/scenes/humanoid.xml")).text());
+
+// Load in the state from XML
+let model       = new mujoco.Model("/working/humanoid.xml");
+let state       = new mujoco.State(model);
+let simulation  = new mujoco.Simulation(model, state);
 ```
 
-**Utility Functions**
+Typescript definitions are available.
 
-| method                     | description                                                               |
-| -------------------------- | ------------------------------------------------------------------------- |
-| `async downloadFile(path)` | Download file from url and store in MEMFS so that wasm module can read it |
+## Work In Progress Disclaimer
 
-**Model**
+So far, most mjModel and mjData state variables and functions (that do not require custom structs) are exposed.
 
-| method            | description                 |
-| ----------------- | --------------------------- |
-| `load_from_xml()` | Load model from xml string  |
-| `ptr()`           | Get pointer to MuJoCo model |
-| `val()`           | Get MuJoCo model value      |
-| `names()`         | Get names of model          |
-| `mesh_vertadr()`  | Get mesh vertex address     |
-| `mesh_vertnum()`  | Get mesh vertex number      |
-| `mesh_faceadr()`  | Get mesh face address       |
-| `mesh_facenum()`  | Get mesh face number        |
-| `body_parentid()` | Get body parent id          |
-| `body_geomnum()`  | Get body geometry number    |
-| `body_geomadr()`  | Get body geometry address   |
-| `geom_type()`     | Get geometry type           |
-| `geom_bodyid()`   | Get geometry body id        |
-| `geom_group()`    | Get geometry group          |
-| `geom_contype()`  | Get geometry contact type   |
-| `mesh_normal()`   | Get mesh normal             |
-| `mesh_face()`     | Get mesh face               |
-| `mesh_vert()`     | Get mesh vertex             |
-| `name_meshadr()`  | Get name mesh address       |
-| `geom_pos()`      | Get geometry position       |
-| `geom_quat()`     | Get geometry quaternion     |
-| `geom_size()`     | Get geometry size           |
-| `geom_rgba()`     | Get geometry rgba           |
-| `body_pos()`      | Get body position           |
-| `body_quat()`     | Get body quaternion         |
-
-**State**
-
-| method  | description                 |
-| ------- | --------------------------- |
-| `ptr()` | Get pointer to MuJoCo state |
-| `val()` | Get MuJoCo state value      |
-
-**Simulation**
-
-| method    | description          |
-| --------- | -------------------- |
-| `step()`  | Step simulation      |
-| `state()` | Get simulation state |
-| `model()` | Get simulation model |
-| `xquat()` | Get quaternion       |
-| `xpos()`  | Get position         |
+At some point, I'd like to de-opinionate the binding and make it match the original MuJoCo API better.

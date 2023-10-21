@@ -3,7 +3,7 @@
 *.slo
 *.lo
 *.o
-*.obj
+*.pyc
 
 # Precompiled Headers
 *.gch
@@ -53,3 +53,28 @@ include/*
 lib/*
 bin/*
 test/test_runner
+.vscode
+.cache
+.fiveserverrc
+
+# Dependency directories
+node_modules/**/*
+jspm_packages/
+
+# Three.js Build
+!node_modules/three/
+!node_modules/three/*/
+!node_modules/three/build/*
+# Three.js Controls
+!node_modules/three/examples/*/
+!node_modules/three/examples/jsm/
+!node_modules/three/examples/jsm/*/
+!node_modules/three/examples/jsm/controls/
+!node_modules/three/examples/jsm/controls/OrbitControls.js
+!node_modules/three/examples/jsm/controls/DragControls.js
+!node_modules/three/examples/jsm/libs/
+!node_modules/three/examples/jsm/libs/lil-gui.module.min.js
+#!node_modules/three/examples/jsm/utils/
+#!node_modules/three/examples/jsm/utils/*
+#!node_modules/three/examples/jsm/loaders/
+#!node_modules/three/examples/jsm/loaders/*

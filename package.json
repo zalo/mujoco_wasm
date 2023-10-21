@@ -1,8 +1,8 @@
 {
-  "name": "@cwiz89/mujoco-wasm",
-  "version": "0.0.1",
+  "name": "mujoco_wasm",
+  "version": "0.0.2",
   "description": "Run MuJoCo simulations in browser",
-  "main": "index.js",
+  "main": "dist/mujoco_wasm.js",
   "directories": {
     "lib": "lib"
   },
@@ -11,19 +11,19 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/stillonearth/MuJoCo-wasm.git"
+    "url": "git+https://github.com/zalo/mujoco_wasm.git"
   },
   "keywords": [
     "mujoco",
     "wasm"
   ],
-  "author": "Sergei Surovtsev",
+  "author": "Sergei Surovtsev and Johnathon Selstad",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/stillonearth/MuJoCo-wasm/issues"
+    "url": "https://github.com/zalo/mujoco_wasm/issues"
   },
-  "homepage": "https://github.com/stillonearth/MuJoCo-wasm#readme",
+  "homepage": "https://github.com/zalo/mujoco_wasm#readme",
   "dependencies": {
-    "buffer": "^6.0.3"
+    "three": "^0.150.1"
   }
 }

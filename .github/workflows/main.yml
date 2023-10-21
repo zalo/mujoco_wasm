@@ -1,0 +1,35 @@
+name: Build mujoco_wasm
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: mymindstorm/setup-emsdk@v11
+
+      - name: Verify Emscripten is Installed
+        run: emcc -v
+
+      - name: Linux - Build Base Binary
+        if: runner.os == 'Linux'
+        run: |
+          mkdir build
+          cd build
+          emcmake cmake ..
+          make
+
+      - name: Linux - Upload Build
+        uses: actions/upload-artifact@v3
+        if: runner.os == 'Linux'
+        with:
+          name: mujoco_wasm
+          path: |
+            ./README.md
+            ./build
+            ./dist
