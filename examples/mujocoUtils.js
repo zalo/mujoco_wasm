@@ -287,6 +287,23 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     let textDecoder = new TextDecoder("utf-8");
     let fullString = textDecoder.decode(model.names);
     let names = fullString.split(textDecoder.decode(new ArrayBuffer(1)));
+    
+    // model.names is an array of utf values, with 0 as a separator.
+    // first we split the array at each 0, then we decode each subarray into a string,
+    // and store the index of the first character as a key
+    // (since model.name_bodyadr contains the index of the first character of the body name).
+    let current = [];
+    let current_firstchar_index = 0;
+    let name_index = {};
+    for (let i = 0; i < model.names.length; i++) {
+      if (model.names[i] == 0) {
+        name_index[current_firstchar_index] = textDecoder.decode(new Uint8Array(current));
+        current = [];
+        current_firstchar_index = i + 1;
+      } else {
+        current.push(model.names[i]);
+      }
+    }
 
     // Create the root object.
     let mujocoRoot = new THREE.Group();
@@ -321,7 +338,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       // Create the body if it doesn't exist.
       if (!(b in bodies)) {
         bodies[b] = new THREE.Group();
-        bodies[b].name = names[model.name_bodyadr[b]];
+        bodies[b].name = name_index[model.name_bodyadr[b]];
         bodies[b].bodyID = b;
         bodies[b].has_custom_mesh = false;
       }
