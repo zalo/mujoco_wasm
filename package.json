@@ -4,9 +4,13 @@
   "description": "Run MuJoCo simulations in browser",
   "main": "dist/mujoco_wasm.js",
   "directories": {
+    "example": "examples",
     "lib": "lib"
   },
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -24,6 +28,11 @@
   },
   "homepage": "https://github.com/zalo/mujoco_wasm#readme",
   "dependencies": {
+    "onnxruntime-web": "^1.21.1",
     "three": "^0.150.1"
+  },
+  "types": "./dist/mujoco_wasm.d.ts",
+  "devDependencies": {
+    "vite": "^6.3.4"
   }
 }

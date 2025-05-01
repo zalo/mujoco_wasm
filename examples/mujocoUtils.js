@@ -29,7 +29,9 @@ export function setupGUI(parentContext) {
   parentContext.gui.add(parentContext.params, 'scene', {
     "Humanoid": "humanoid.xml", "Cassie": "agility_cassie/scene.xml",
     "Hammock": "hammock.xml", "Balloons": "balloons.xml", "Hand": "shadow_hand/scene_right.xml",
-    "Flag": "flag.xml", "Mug": "mug.xml", "Tendon": "model_with_tendon.xml"
+    "Flag": "flag.xml", "Mug": "mug.xml", "Tendon": "model_with_tendon.xml",
+    "Go2": "unitree_go2/scene.xml",
+    "G1": "unitree_g1/scene.xml",
   }).name('Example Scene').onChange(reload);
 
   // Add a help menu.
@@ -289,6 +291,21 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     let fullString = textDecoder.decode(model.names);
     let names = fullString.split(textDecoder.decode(new ArrayBuffer(1)));
 
+    // Parse joint names
+    parent.jointNames = [];
+    console.log("model.njnt", model.njnt);
+    for (let j = 0; j < model.njnt; j++) {
+      let start_idx = model.name_jntadr[j];
+      let end_idx = start_idx;
+      while (end_idx < names_array.length && names_array[end_idx] !== 0) {
+        end_idx++;
+      }
+      let name_buffer = names_array.subarray(start_idx, end_idx);
+      parent.jointNames.push(textDecoder.decode(name_buffer));
+
+      console.log("parsed jointName", parent.jointNames[j]);
+    }
+
     // Create the root object.
     let mujocoRoot = new THREE.Group();
     mujocoRoot.name = "MuJoCo Root"
@@ -541,57 +558,9 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
 /** Downloads the scenes/examples folder to MuJoCo's virtual filesystem
  * @param {mujoco} mujoco */
 export async function downloadExampleScenesFolder(mujoco) {
-  let allFiles = [
-    "22_humanoids.xml",
-    "adhesion.xml",
-    "agility_cassie/assets/achilles-rod.obj",
-    "agility_cassie/assets/cassie-texture.png",
-    "agility_cassie/assets/foot-crank.obj",
-    "agility_cassie/assets/foot.obj",
-    "agility_cassie/assets/heel-spring.obj",
-    "agility_cassie/assets/hip-pitch.obj",
-    "agility_cassie/assets/hip-roll.obj",
-    "agility_cassie/assets/hip-yaw.obj",
-    "agility_cassie/assets/knee-spring.obj",
-    "agility_cassie/assets/knee.obj",
-    "agility_cassie/assets/pelvis.obj",
-    "agility_cassie/assets/plantar-rod.obj",
-    "agility_cassie/assets/shin.obj",
-    "agility_cassie/assets/tarsus.obj",
-    "agility_cassie/cassie.xml",
-    "agility_cassie/scene.xml",
-    "arm26.xml",
-    "balloons.xml",
-    "flag.xml",
-    "hammock.xml",
-    "humanoid.xml",
-    "humanoid_body.xml",
-    "mug.obj",
-    "mug.png",
-    "mug.xml",
-    "scene.xml",
-    "shadow_hand/assets/f_distal_pst.obj",
-    "shadow_hand/assets/f_knuckle.obj",
-    "shadow_hand/assets/f_middle.obj",
-    "shadow_hand/assets/f_proximal.obj",
-    "shadow_hand/assets/forearm_0.obj",
-    "shadow_hand/assets/forearm_1.obj",
-    "shadow_hand/assets/forearm_collision.obj",
-    "shadow_hand/assets/lf_metacarpal.obj",
-    "shadow_hand/assets/mounting_plate.obj",
-    "shadow_hand/assets/palm.obj",
-    "shadow_hand/assets/th_distal_pst.obj",
-    "shadow_hand/assets/th_middle.obj",
-    "shadow_hand/assets/th_proximal.obj",
-    "shadow_hand/assets/wrist.obj",
-    "shadow_hand/left_hand.xml",
-    "shadow_hand/right_hand.xml",
-    "shadow_hand/scene_left.xml",
-    "shadow_hand/scene_right.xml",
-    "simple.xml",
-    "slider_crank.xml",
-    "model_with_tendon.xml",
-  ];
+  // Get list of all files recursively from the scenes directory
+  const response = await fetch('./examples/scenes/files.json');
+  const allFiles = await response.json();
 
   let requests = allFiles.map((url) => fetch("./examples/scenes/" + url));
   let responses = await Promise.all(requests);

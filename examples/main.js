@@ -9,22 +9,22 @@ import   load_mujoco        from '../dist/mujoco_wasm.js';
 // Load the MuJoCo Module
 const mujoco = await load_mujoco();
 
+import * as ort from 'onnxruntime-web';
 // Set up Emscripten's Virtual File System
-var initialScene = "humanoid.xml";
+// var initialScene = "humanoid.xml";
+var initialScene = "unitree_go2/scene.xml";
+// var initialScene = "unitree_g1/scene.xml";
 mujoco.FS.mkdir('/working');
 mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
-mujoco.FS.writeFile("/working/" + initialScene, await(await fetch("./examples/scenes/" + initialScene)).text());
 
+// Observation helper classes
+import { BaseAngVelMultistep, GravityMultistep, JointPosMultistep, JointVelMultistep, PrevActions } from './observationHelpers.js';
 export class MuJoCoDemo {
   constructor() {
     this.mujoco = mujoco;
 
-    // Load in the state from XML
-    this.model      = new mujoco.Model("/working/" + initialScene);
-    this.state      = new mujoco.State(this.model);
-    this.simulation = new mujoco.Simulation(this.model, this.state);
-
-    // Define Random State Variables
+    // Move model loading to init()
+    // Just initialize basic parameters here
     this.params = { scene: initialScene, paused: false, help: false, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0 };
     this.mujoco_time = 0.0;
     this.bodies  = {}, this.lights = {};
@@ -70,44 +70,142 @@ export class MuJoCoDemo {
 
     window.addEventListener('resize', this.onWindowResize.bind(this));
 
-    // Initialize the Drag State Manager.
     this.dragStateManager = new DragStateManager(this.scene, this.renderer, this.camera, this.container.parentElement, this.controls);
+
+    // Add new properties for ONNX Runtime
+    this.session = null;
+    this.lastActions = null;
+    this.isInferencing = false;
+    this.modelPath = './examples/checkpoints/20250410_121925/model_14000.onnx';
   }
 
   async init() {
-    // Download the the examples to MuJoCo's virtual file system
+    // Download the examples first
     await downloadExampleScenesFolder(mujoco);
 
-    // Initialize the three.js Scene using the .xml Model in initialScene
-    [this.model, this.state, this.simulation, this.bodies, this.lights] =  
+    // // Now load the initial model
+    console.log("initialScene", initialScene);
+    this.model = new mujoco.Model("/working/" + initialScene);
+    this.state = new mujoco.State(this.model);
+    this.simulation = new mujoco.Simulation(this.model, this.state);
+
+    // Initialize the three.js Scene using the .xml Model
+    [this.model, this.state, this.simulation, this.bodies, this.lights] =
       await loadSceneFromURL(mujoco, initialScene, this);
 
     this.gui = new GUI();
     setupGUI(this);
+
+    // Load ONNX model
+    try {
+      // Fetch the model file
+      const modelResponse = await fetch(this.modelPath);
+      const modelArrayBuffer = await modelResponse.arrayBuffer();
+
+      // Create session from the array buffer
+      this.session = await ort.InferenceSession.create(modelArrayBuffer, {
+        executionProviders: ['wasm'],
+        graphOptimizationLevel: 'all'
+      });
+
+      console.log('ONNX model loaded successfully');
+    } catch (e) {
+      console.error("Failed to load ONNX model:", e);
+    }
+
+    // set up observations
+    this.numActions = 29;
+    this.observations = {
+      base_angvel_multistep: new BaseAngVelMultistep(this.model, this.simulation, this, "free_joint"),
+      gravity_multistep: new GravityMultistep(this.model, this.simulation, this, "free_joint"),
+      joint_pos_multistep: new JointPosMultistep(this.model, this.simulation, this, this.jointNames.slice(1)),
+      joint_vel_multistep: new JointVelMultistep(this.model, this.simulation, this, this.jointNames.slice(1)),
+      prev_actions: new PrevActions(this.model, this.simulation, this)
+    };
+  }
+
+  runInference(state) {
+    if (!this.session || this.isInferencing) return;
+
+    console.log("Triggering inference with state:", state);
+    this.isInferencing = true;
+
+    try {
+      // Create input tensor
+      const inputTensor = new ort.Tensor(
+        'float32',
+        new Float32Array(state),
+        [1, state.length]
+      );
+
+      const input_name = this.session.inputNames[0];
+      const output_name = this.session.outputNames[0];
+
+      // Run inference
+      this.session.run({
+        [input_name]: inputTensor // Use your actual input name
+      }).then(results => {
+        console.log("Inference successful, actions:", results[output_name].data);
+        this.lastActions = results[output_name].data;
+        this.isInferencing = false;
+      }).catch(e => {
+        console.error("Inference failed:", e);
+        this.isInferencing = false;
+      });
+    } catch (e) {
+      console.error("Failed to start inference:", e);
+      this.isInferencing = false;
+    }
   }
 
   onWindowResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize( window.innerWidth, window.innerHeight );
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  getObservations(simulation) {
+    let allObservations = [];
+    for (const obs_func of Object.values(this.observations)) {
+      const obs = obs_func.compute(simulation);
+      allObservations.push(...obs);
+    }
+    return allObservations;
   }
 
   render(timeMS) {
+    if (!this.model || !this.state || !this.simulation || !this.observations) {
+      console.debug("Model, state, or simulation not initialized");
+      return;
+    }
+
     this.controls.update();
 
     if (!this.params["paused"]) {
       let timestep = this.model.getOptions().timestep;
       if (timeMS - this.mujoco_time > 35.0) { this.mujoco_time = timeMS; }
       while (this.mujoco_time < timeMS) {
-
-        // Jitter the control state with gaussian random noise
-        if (this.params["ctrlnoisestd"] > 0.0) {
-          let rate  = Math.exp(-timestep / Math.max(1e-10, this.params["ctrlnoiserate"]));
+        // TODO: remove this
+        if (this.params["ctrlnoisestd"] > -1.0) {
+          let rate = Math.exp(-timestep / Math.max(1e-10, this.params["ctrlnoiserate"]));
           let scale = this.params["ctrlnoisestd"] * Math.sqrt(1 - rate * rate);
           let currentCtrl = this.simulation.ctrl;
-          for (let i = 0; i < currentCtrl.length; i++) {
-            currentCtrl[i] = rate * currentCtrl[i] + scale * standardNormal();
-            this.params["Actuator " + i] = currentCtrl[i];
+
+          // Get the robot state
+          const state = this.getObservations(this.simulation);
+          // Trigger inference asynchronously
+          this.runInference(state);
+
+          // Use the last known actions
+          if (this.lastActions) {
+            for (let i = 0; i < currentCtrl.length; i++) {
+              currentCtrl[i] = this.lastActions[i];
+              // Optional: Add noise
+              if (this.params["ctrlnoisestd"] > 0.0) {
+                currentCtrl[i] += scale * standardNormal();
+              }
+              this.params["Actuator " + i] = currentCtrl[i];
+            }
           }
         }
 
