@@ -1,0 +1,110 @@
+{
+    "init_state": {
+        "pos": [
+            0.0,
+            0.0,
+            0.4
+        ],
+        "rot": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+        ],
+        "lin_vel": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "ang_vel": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "joint_pos": {
+            ".*L_hip_joint": 0.1,
+            ".*R_hip_joint": -0.1,
+            "F[L,R]_thigh_joint": 0.7,
+            "R[L,R]_thigh_joint": 0.8,
+            ".*_calf_joint": -1.5
+        },
+        "joint_vel": {
+            ".*": 0.0
+        }
+    },
+    "body_names_isaac": [
+        "base",
+        "FL_hip",
+        "FR_hip",
+        "Head_upper",
+        "RL_hip",
+        "RR_hip",
+        "FL_thigh",
+        "FR_thigh",
+        "Head_lower",
+        "RL_thigh",
+        "RR_thigh",
+        "FL_calf",
+        "FR_calf",
+        "RL_calf",
+        "RR_calf",
+        "FL_foot",
+        "FR_foot",
+        "RL_foot",
+        "RR_foot"
+    ],
+    "joint_names_isaac": [
+        "FL_hip_joint",
+        "FR_hip_joint",
+        "RL_hip_joint",
+        "RR_hip_joint",
+        "FL_thigh_joint",
+        "FR_thigh_joint",
+        "RL_thigh_joint",
+        "RR_thigh_joint",
+        "FL_calf_joint",
+        "FR_calf_joint",
+        "RL_calf_joint",
+        "RR_calf_joint"
+    ],
+    "actuators": {
+        "base_legs": {
+            "class_type": "isaaclab.actuators.actuator_pd:ImplicitActuator",
+            "joint_names_expr": [
+                ".*_hip_joint",
+                ".*_thigh_joint",
+                ".*_calf_joint"
+            ],
+            "effort_limit": {
+                ".*_hip_joint": 23.5,
+                ".*_thigh_joint": 23.5,
+                ".*_calf_joint": 35.5
+            },
+            "velocity_limit": 30.0,
+            "effort_limit_sim": {
+                ".*_hip_joint": 23.5,
+                ".*_thigh_joint": 23.5,
+                ".*_calf_joint": 35.5
+            },
+            "velocity_limit_sim": 30.0,
+            "stiffness": 25.0,
+            "damping": 0.5,
+            "armature": null,
+            "friction": null
+        }
+    },
+    "default_joint_pos": [
+        0.10000000149011612,
+        -0.10000000149011612,
+        0.10000000149011612,
+        -0.10000000149011612,
+        0.699999988079071,
+        0.699999988079071,
+        0.800000011920929,
+        0.800000011920929,
+        -1.5,
+        -1.5,
+        -1.5,
+        -1.5
+    ]
+}

@@ -17,6 +17,46 @@ var initialScene = "unitree_go2/scene.xml";
 mujoco.FS.mkdir('/working');
 mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
 
+class ONNXModule {
+  constructor(modelPath) {
+    this.modelPath = modelPath;
+    this.metaPath = modelPath.replace('.onnx', '.json');
+  }
+
+  async init() {
+    // Load the ONNX model
+    const modelResponse = await fetch(this.modelPath);
+    const modelArrayBuffer = await modelResponse.arrayBuffer();
+    const meta = await (fetch(this.metaPath).then(response => response.json()));
+    
+    this.inKeys = meta["in_keys"];
+    this.outKeys = meta["out_keys"];
+
+    // Create session from the array buffer
+    this.session = await ort.InferenceSession.create(modelArrayBuffer, {
+      executionProviders: ['wasm'],
+      graphOptimizationLevel: 'all'
+    });
+
+    console.log('ONNX model loaded successfully');
+    console.log(this.session.inputNames);
+    console.log(this.session.outputNames);
+  }
+
+  async runInference(input) {
+    let onnxInput = {};
+    for (let i = 0; i < this.inKeys.length; i++) {
+      onnxInput[this.session.inputNames[i]] = input[this.inKeys[i]];
+    }
+    const onnxOutput = await this.session.run(onnxInput);
+    let result = {};
+    for (let i = 0; i < this.outKeys.length; i++) {
+      result[this.outKeys[i]] = onnxOutput[this.session.outputNames[i]].data;
+    }
+    return result;
+  }
+}
+
 // Observation helper classes
 import { BaseAngVelMultistep, GravityMultistep, JointPosMultistep, JointVelMultistep, PrevActions } from './observationHelpers.js';
 export class MuJoCoDemo {
@@ -28,6 +68,7 @@ export class MuJoCoDemo {
     this.params = { scene: initialScene, paused: false, help: false, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0 };
     this.mujoco_time = 0.0;
     this.bodies  = {}, this.lights = {};
+    this.jointNamesMJC = [];
     this.tmpVec  = new THREE.Vector3();
     this.tmpQuat = new THREE.Quaternion();
     this.updateGUICallbacks = [];
@@ -76,7 +117,9 @@ export class MuJoCoDemo {
     this.session = null;
     this.lastActions = null;
     this.isInferencing = false;
-    this.modelPath = './examples/checkpoints/20250410_121925/model_14000.onnx';
+    // this.modelPath = './examples/checkpoints/20250410_121925/model_14000.onnx';
+    // this.modelPath = './examples/checkpoints/policy-05-02_23-55.onnx';
+    this.modelPath = './examples/checkpoints/policy-05-03_21-31.onnx';
   }
 
   async init() {
@@ -92,66 +135,85 @@ export class MuJoCoDemo {
     // Initialize the three.js Scene using the .xml Model
     [this.model, this.state, this.simulation, this.bodies, this.lights] =
       await loadSceneFromURL(mujoco, initialScene, this);
+    
+      // Parse joint names
+    console.log("model.njnt", this.model.njnt);
+    const textDecoder = new TextDecoder();
+    const names_array = new Uint8Array(this.model.names);
+
+    this.qposAdr = [];
+    this.qvelAdr = [];
+    for (let j = 0; j < this.model.njnt; j++) {
+      let start_idx = this.model.name_jntadr[j];
+      let end_idx = start_idx;
+      while (end_idx < names_array.length && names_array[end_idx] !== 0) {
+        end_idx++;
+      }
+      let name = textDecoder.decode(names_array.subarray(start_idx, end_idx));
+      if (this.model.jnt_type[j] == mujoco.mjtJoint.mjJNT_HINGE.value) {
+        this.jointNamesMJC.push(name);
+        this.qposAdr.push(this.model.jnt_qposadr[j]);
+        this.qvelAdr.push(this.model.jnt_dofadr[j]);
+      };
+    }
+    console.log("parsed jointName", this.jointNamesMJC);
+
+    const asset_meta = await fetch("./examples/checkpoints/asset_meta.json").then(response => response.json());
+    this.jointNamesIsaac = asset_meta["joint_names_isaac"];
+    this.isaac2mjc = this.jointNamesMJC.map(name => this.jointNamesIsaac.indexOf(name));
+    this.mjc2isaac = this.jointNamesIsaac.map(name => this.jointNamesMJC.indexOf(name));
+    this.numActions = this.jointNamesIsaac.length;
+    this.defaultJpos = new Float32Array(asset_meta["default_joint_pos"]);
+    this.jntKp = new Float32Array(this.numActions).fill(20.);
+    this.jntKd = new Float32Array(this.numActions).fill(0.5);
+    this.timestep = this.model.getOptions().timestep;
+    this.decimation = Math.round(0.02 / this.timestep);
+    this.simStepCount = 0;
+    this.actionBuffer = new Array(4).fill().map(() => new Float32Array(this.numActions));
+
+    console.log("timestep:", this.timestep, "decimation:", this.decimation);
 
     this.gui = new GUI();
     setupGUI(this);
 
-    // Load ONNX model
-    try {
-      // Fetch the model file
-      const modelResponse = await fetch(this.modelPath);
-      const modelArrayBuffer = await modelResponse.arrayBuffer();
+    this.policy = new ONNXModule(this.modelPath);
+    await this.policy.init();
+    this.adapt_hx = new Float32Array(128);
+    this.rpy = new THREE.Euler();
 
-      // Create session from the array buffer
-      this.session = await ort.InferenceSession.create(modelArrayBuffer, {
-        executionProviders: ['wasm'],
-        graphOptimizationLevel: 'all'
-      });
-
-      console.log('ONNX model loaded successfully');
-    } catch (e) {
-      console.error("Failed to load ONNX model:", e);
-    }
+    // console.log(this.model.timeMS);
 
     // set up observations
-    this.numActions = 29;
     this.observations = {
-      base_angvel_multistep: new BaseAngVelMultistep(this.model, this.simulation, this, "free_joint"),
-      gravity_multistep: new GravityMultistep(this.model, this.simulation, this, "free_joint"),
-      joint_pos_multistep: new JointPosMultistep(this.model, this.simulation, this, this.jointNames.slice(1)),
-      joint_vel_multistep: new JointVelMultistep(this.model, this.simulation, this, this.jointNames.slice(1)),
-      prev_actions: new PrevActions(this.model, this.simulation, this)
+      // base_angvel_multistep: new BaseAngVelMultistep(this.model, this.simulation, this, "free_joint", steps=3),
+      gravity_multistep: new GravityMultistep(this.model, this.simulation, this, "free_joint", 3),
+      joint_pos_multistep: new JointPosMultistep(this.model, this.simulation, this, this.jointNamesIsaac, 3),
+      joint_vel_multistep: new JointVelMultistep(this.model, this.simulation, this, this.jointNamesIsaac, 3),
+      prev_actions: new PrevActions(this.model, this.simulation, this, 3)
     };
   }
 
-  runInference(state) {
-    if (!this.session || this.isInferencing) return;
-
-    console.log("Triggering inference with state:", state);
+  runInference(command, policy) {
+    if (!this.policy || this.isInferencing) return;
     this.isInferencing = true;
-
     try {
-      // Create input tensor
-      const inputTensor = new ort.Tensor(
-        'float32',
-        new Float32Array(state),
-        [1, state.length]
-      );
-
-      const input_name = this.session.inputNames[0];
-      const output_name = this.session.outputNames[0];
-
-      // Run inference
-      this.session.run({
-        [input_name]: inputTensor // Use your actual input name
-      }).then(results => {
-        console.log("Inference successful, actions:", results[output_name].data);
-        this.lastActions = results[output_name].data;
-        this.isInferencing = false;
-      }).catch(e => {
-        console.error("Inference failed:", e);
-        this.isInferencing = false;
-      });
+      const input = {
+        "command": new ort.Tensor('float32', new Float32Array(command), [1, 27]),
+        "policy": new ort.Tensor('float32', new Float32Array(policy), [1, policy.length]),
+        "is_init": new ort.Tensor('bool', [false], [1]),
+        "adapt_hx": new ort.Tensor('float32', this.adapt_hx, [1, 128])
+      }
+      this.policy.runInference(input).then(
+        result => {
+          this.lastActions = result["action"];
+          for (let i = this.actionBuffer.length - 1; i > 0; i--) {
+            this.actionBuffer[i] = this.actionBuffer[i - 1];
+          }
+          this.actionBuffer[0] = this.lastActions;
+          this.adapt_hx = result["next,adapt_hx"];
+          this.isInferencing = false;
+        }
+      )
     } catch (e) {
       console.error("Failed to start inference:", e);
       this.isInferencing = false;
@@ -164,10 +226,43 @@ export class MuJoCoDemo {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
+  getCommand(simulation) {
+    const omega = 4.0 * Math.PI
+    const time = this.mujoco_time / 1000.;
+    const phase = [
+      omega * time + Math.PI,
+      omega * time,
+      omega * time,
+      omega * time + Math.PI,
+    ];
+    const osc = [...phase.map(Math.sin), ...phase.map(Math.cos), omega, omega, omega, omega]
+    const setpoint = new THREE.Vector3(0, 0, 0);
+    const base_pos_w = new THREE.Vector3(...this.simulation.qpos.subarray(0, 3));
+    const kp = 12.;
+    const kd = 1.8 * Math.sqrt(kp);
+    const mass = 1.;
+    let setpoint_b = setpoint.sub(base_pos_w).applyQuaternion(this.quat.invert());
+
+    const command = [
+      setpoint_b.x, setpoint_b.y,
+      0. - this.rpy.y,
+      kp * setpoint_b.x, kp * setpoint_b.y,
+      kd, kd, kd,
+      kp * (0. - this.rpy.y),
+      mass,
+      kp * setpoint_b.x / mass, kp * setpoint_b.y / mass,
+      kd / mass, kd / mass, kd / mass
+    ]
+    return [...command, ...osc];
+  }
+
   getObservations(simulation) {
     let allObservations = [];
     for (const obs_func of Object.values(this.observations)) {
       const obs = obs_func.compute(simulation);
+      if (obs.some(isNaN)) {
+        console.log("NaN in observation", obs_func.constructor.name);
+      }
       allObservations.push(...obs);
     }
     return allObservations;
@@ -184,28 +279,32 @@ export class MuJoCoDemo {
     if (!this.params["paused"]) {
       let timestep = this.model.getOptions().timestep;
       if (timeMS - this.mujoco_time > 35.0) { this.mujoco_time = timeMS; }
-      while (this.mujoco_time < timeMS) {
-        // TODO: remove this
-        if (this.params["ctrlnoisestd"] > -1.0) {
+      while (this.mujoco_time < timeMS) {        
+        // Get the robot state
+        const quat = this.simulation.qpos.subarray(3, 7);
+        this.quat = new THREE.Quaternion(quat[1], quat[2], quat[3], quat[0]);
+        this.rpy.setFromQuaternion(this.quat);
+        // console.log(this.rpy);
+        this.jpos = this.qposAdr.map(adr => this.simulation.qpos[adr]);
+        this.jvel = this.qvelAdr.map(adr => this.simulation.qvel[adr]);
+
+        if (this.simStepCount % this.decimation == 0) {
           let rate = Math.exp(-timestep / Math.max(1e-10, this.params["ctrlnoiserate"]));
           let scale = this.params["ctrlnoisestd"] * Math.sqrt(1 - rate * rate);
-          let currentCtrl = this.simulation.ctrl;
-
-          // Get the robot state
-          const state = this.getObservations(this.simulation);
+          const command = this.getCommand();
+          const policy = this.getObservations(this.simulation);
           // Trigger inference asynchronously
-          this.runInference(state);
+          this.runInference(command, policy);
+        }
 
-          // Use the last known actions
-          if (this.lastActions) {
-            for (let i = 0; i < currentCtrl.length; i++) {
-              currentCtrl[i] = this.lastActions[i];
-              // Optional: Add noise
-              if (this.params["ctrlnoisestd"] > 0.0) {
-                currentCtrl[i] += scale * standardNormal();
-              }
-              this.params["Actuator " + i] = currentCtrl[i];
-            }
+        // Apply control torque using the last known actions
+        if (this.lastActions) {
+          for (let i = 0; i < this.simulation.ctrl.length; i++) {
+            const j = this.isaac2mjc[i];
+            const targetJpos = 0.5 * this.lastActions[j] + this.defaultJpos[j];
+            const torque = this.jntKp[i] * (targetJpos - this.jpos[i]) + this.jntKd[i] * (0 - this.jvel[i]);
+            this.simulation.ctrl[i] = torque;
+            // this.params["Actuator " + i] = currentCtrl[i];
           }
         }
 
@@ -232,6 +331,7 @@ export class MuJoCoDemo {
         this.simulation.step();
 
         this.mujoco_time += timestep * 1000.0;
+        this.simStepCount += 1;
       }
 
     } else if (this.params["paused"]) {

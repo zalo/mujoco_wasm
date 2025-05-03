@@ -14,10 +14,6 @@ class BaseAngVelMultistep {
     this.simulation = simulation;
     this.steps = steps;
     this.angvel_multistep = new Array(steps).fill().map(() => new Float32Array(3));
-
-    const base_joint_id = demo.jointNames.findIndex(joint => joint === base_joint_name);
-    const joint_dof_adr = model.jnt_dofadr[base_joint_id];
-    this.joint_dof_adr = joint_dof_adr;
   }
 
   /**
@@ -30,8 +26,7 @@ class BaseAngVelMultistep {
     for (let i = this.angvel_multistep.length - 1; i > 0; i--) {
       this.angvel_multistep[i] = this.angvel_multistep[i - 1];
     }
-    this.angvel_multistep[0] = this.simulation.qvel.subarray(this.joint_dof_adr, this.joint_dof_adr + 3);
-
+    this.angvel_multistep[0] = this.simulation.qvel.subarray(3, 6);
     // Flatten all steps into single array
     const flattened = new Float32Array(this.steps * 3);
     for (let i = 0; i < this.steps; i++) {
@@ -57,9 +52,6 @@ class GravityMultistep {
     this.gravity_multistep = new Array(steps).fill().map(() => new Float32Array(3));
 
     // Fix undefined variables
-    const base_joint_id = demo.jointNames.findIndex(joint => joint === base_joint_name);
-    const joint_qpos_adr = model.jnt_qposadr[base_joint_id];
-    this.joint_qposadr = joint_qpos_adr;
 
     this.gravity = new THREE.Vector3(0, 0, -1.0);
   }
@@ -71,9 +63,9 @@ class GravityMultistep {
    */
   compute(extra_info) {
     // Get projected gravity and normalize it
-    const quat = this.simulation.qpos.subarray(this.joint_qposadr, this.joint_qposadr + 4);
+    const quat = this.simulation.qpos.subarray(3, 7);
     // Create quaternion directly from the array values
-    const quat_inv = new THREE.Quaternion(quat[0], quat[1], quat[2], quat[3]).invert();
+    const quat_inv = new THREE.Quaternion(quat[1], quat[2], quat[3], quat[0]).invert();
     const gravity = this.gravity.clone().applyQuaternion(quat_inv);
 
     // Update history
@@ -109,10 +101,11 @@ class JointPosMultistep {
 
     this.joint_qpos_adr = [];
     for (let i = 0; i < joint_names.length; i++) {
-      const joinidx = demo.jointNames.findIndex(joint => joint === joint_names[i]);
-      const joinqposadr = model.jnt_qposadr[joinidx];
+      const idx = demo.jointNamesMJC.indexOf(joint_names[i]);
+      const joinqposadr = demo.qposAdr[idx];
       this.joint_qpos_adr.push(joinqposadr);
     }
+    console.log("jposadr", this.joint_qpos_adr);
   }
 
   /**
@@ -157,10 +150,11 @@ class JointVelMultistep {
 
     this.joint_qvel_adr = [];
     for (let i = 0; i < joint_names.length; i++) {
-      const joinidx = demo.jointNames.findIndex(joint => joint === joint_names[i]);
-      const joinqveladr = model.jnt_dofadr[joinidx];
-      this.joint_qvel_adr.push(joinqveladr);
+      const idx = demo.jointNamesMJC.indexOf(joint_names[i]);
+      const jointqveladr = demo.qvelAdr[idx];
+      this.joint_qvel_adr.push(jointqveladr);
     }
+    console.log("jveladr", this.joint_qvel_adr);
   }
 
   /**
@@ -199,7 +193,7 @@ class PrevActions {
     this.simulation = simulation;
     this.steps = steps;
     this.numActions = demo.numActions;
-    this.prevActions = new Array(steps).fill().map(() => new Float32Array(this.numActions));
+    this.actionBuffer = demo.actionBuffer;
   }
 
   /**
@@ -208,21 +202,12 @@ class PrevActions {
    * @returns {Float32Array}
    */
   compute(extra_info) {
-    // Return previous actions and update them
-    for (let i = this.prevActions.length - 1; i > 0; i--) {
-      // Create a new Float32Array with copied values
-      this.prevActions[i] = new Float32Array(this.prevActions[i - 1]);
-    }
-    // Create a new Float32Array for the current control values
-    this.prevActions[0] = new Float32Array(this.simulation.ctrl);
-
     // Flatten all steps
     const flattened = new Float32Array(this.steps * this.numActions);
     for (let i = 0; i < this.steps; i++) {
-      if (this.prevActions[i]) {  // Check if the array exists
-        flattened.set(this.prevActions[i], i * this.numActions);
-      }
+      flattened.set(this.actionBuffer[i], i * this.numActions);
     }
+    console.log("prevActions", flattened);
     return flattened;
   }
 }

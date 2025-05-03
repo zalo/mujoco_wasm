@@ -291,20 +291,21 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     let fullString = textDecoder.decode(model.names);
     let names = fullString.split(textDecoder.decode(new ArrayBuffer(1)));
 
-    // Parse joint names
-    parent.jointNames = [];
-    console.log("model.njnt", model.njnt);
-    for (let j = 0; j < model.njnt; j++) {
-      let start_idx = model.name_jntadr[j];
-      let end_idx = start_idx;
-      while (end_idx < names_array.length && names_array[end_idx] !== 0) {
-        end_idx++;
-      }
-      let name_buffer = names_array.subarray(start_idx, end_idx);
-      parent.jointNames.push(textDecoder.decode(name_buffer));
-
-      console.log("parsed jointName", parent.jointNames[j]);
-    }
+    // // Parse joint names
+    // console.log("model.njnt", model.njnt);
+    // for (let j = 0; j < model.njnt; j++) {
+    //   let start_idx = model.name_jntadr[j];
+    //   let end_idx = start_idx;
+    //   while (end_idx < names_array.length && names_array[end_idx] !== 0) {
+    //     end_idx++;
+    //   }
+    //   let name_buffer = names_array.subarray(start_idx, end_idx);
+    //   console.log(model.jnt_type[j], mujoco.mjtJoint.mjJNT_HINGE.value, model.jnt_type[j] == mujoco.mjtJoint.mjJNT_HINGE.value);
+    //   if (model.jnt_type[j] == mujoco.mjtJoint.mjJNT_HINGE.value) {
+    //     parent.jointNamesMJC.push(textDecoder.decode(name_buffer));
+    //   };
+    // }
+    // console.log("parsed jointName", parent.jointNamesMJC);
 
     // Create the root object.
     let mujocoRoot = new THREE.Group();
