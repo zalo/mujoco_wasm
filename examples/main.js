@@ -48,7 +48,10 @@ class ONNXModule {
     for (let i = 0; i < this.inKeys.length; i++) {
       onnxInput[this.session.inputNames[i]] = input[this.inKeys[i]];
     }
+    // const inferenceStart = performance.now();
     const onnxOutput = await this.session.run(onnxInput);
+    // const inferenceEnd = performance.now();
+    // console.log("inference time", inferenceEnd - inferenceStart)
     let result = {};
     for (let i = 0; i < this.outKeys.length; i++) {
       result[this.outKeys[i]] = onnxOutput[this.session.outputNames[i]].data;
@@ -164,11 +167,13 @@ export class MuJoCoDemo {
     this.mjc2isaac = this.jointNamesIsaac.map(name => this.jointNamesMJC.indexOf(name));
     this.numActions = this.jointNamesIsaac.length;
     this.defaultJpos = new Float32Array(asset_meta["default_joint_pos"]);
-    this.jntKp = new Float32Array(this.numActions).fill(20.);
+    this.jntKp = new Float32Array(this.numActions).fill(25.);
     this.jntKd = new Float32Array(this.numActions).fill(0.5);
     this.timestep = this.model.getOptions().timestep;
     this.decimation = Math.round(0.02 / this.timestep);
     this.simStepCount = 0;
+    this.simTimeStamp = performance.now();
+    this.inferenceStepCount = 0;
     this.actionBuffer = new Array(4).fill().map(() => new Float32Array(this.numActions));
 
     console.log("timestep:", this.timestep, "decimation:", this.decimation);
@@ -194,8 +199,12 @@ export class MuJoCoDemo {
   }
 
   runInference(command, policy) {
-    if (!this.policy || this.isInferencing) return;
+    if (!this.policy || this.isInferencing) {
+      console.log("inference lag");
+      return;
+    }
     this.isInferencing = true;
+    this.inferenceStepCount += 1;
     try {
       const input = {
         "command": new ort.Tensor('float32', new Float32Array(command), [1, 27]),
@@ -203,6 +212,7 @@ export class MuJoCoDemo {
         "is_init": new ort.Tensor('bool', [false], [1]),
         "adapt_hx": new ort.Tensor('float32', this.adapt_hx, [1, 128])
       }
+      // const inferenceStart = performance.now();
       this.policy.runInference(input).then(
         result => {
           this.lastActions = result["action"];
@@ -214,6 +224,8 @@ export class MuJoCoDemo {
           this.isInferencing = false;
         }
       )
+      // const inferenceEnd = performance.now();
+      // console.log("inference time", inferenceEnd - inferenceStart)
     } catch (e) {
       console.error("Failed to start inference:", e);
       this.isInferencing = false;
@@ -229,13 +241,14 @@ export class MuJoCoDemo {
   getCommand(simulation) {
     const omega = 4.0 * Math.PI
     const time = this.mujoco_time / 1000.;
+    // const time = 0.;
     const phase = [
       omega * time + Math.PI,
       omega * time,
       omega * time,
       omega * time + Math.PI,
     ];
-    const osc = [...phase.map(Math.sin), ...phase.map(Math.cos), omega, omega, omega, omega]
+    const osc = [...phase.map(Math.sin), ...phase.map(Math.cos), omega, omega, omega, omega];
     const setpoint = new THREE.Vector3(0, 0, 0);
     const base_pos_w = new THREE.Vector3(...this.simulation.qpos.subarray(0, 3));
     const kp = 12.;
@@ -252,7 +265,7 @@ export class MuJoCoDemo {
       mass,
       kp * setpoint_b.x / mass, kp * setpoint_b.y / mass,
       kd / mass, kd / mass, kd / mass
-    ]
+    ];
     return [...command, ...osc];
   }
 
@@ -278,7 +291,7 @@ export class MuJoCoDemo {
 
     if (!this.params["paused"]) {
       let timestep = this.model.getOptions().timestep;
-      if (timeMS - this.mujoco_time > 35.0) { this.mujoco_time = timeMS; }
+      // if (timeMS - this.mujoco_time > 35.0) { this.mujoco_time = timeMS; }
       while (this.mujoco_time < timeMS) {        
         // Get the robot state
         const quat = this.simulation.qpos.subarray(3, 7);
@@ -301,7 +314,7 @@ export class MuJoCoDemo {
         if (this.lastActions) {
           for (let i = 0; i < this.simulation.ctrl.length; i++) {
             const j = this.isaac2mjc[i];
-            const targetJpos = 0.5 * this.lastActions[j] + this.defaultJpos[j];
+            const targetJpos = 0. * this.lastActions[j] + this.defaultJpos[j];
             const torque = this.jntKp[i] * (targetJpos - this.jpos[i]) + this.jntKd[i] * (0 - this.jvel[i]);
             this.simulation.ctrl[i] = torque;
             // this.params["Actuator " + i] = currentCtrl[i];
@@ -332,8 +345,14 @@ export class MuJoCoDemo {
 
         this.mujoco_time += timestep * 1000.0;
         this.simStepCount += 1;
+        if (this.simStepCount % 200 == 0) {
+          const elapsedTime = (performance.now() - this.simTimeStamp) / 1000;
+          console.log("sim fps", 200 / elapsedTime, "inf fps", this.inferenceStepCount / elapsedTime);
+          this.simTimeStamp = performance.now();
+          this.inferenceStepCount = 0;
+        }
+        break;
       }
-
     } else if (this.params["paused"]) {
       this.dragStateManager.update(); // Update the world-space force origin
       let dragged = this.dragStateManager.physicsObject;

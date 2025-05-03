@@ -127,6 +127,7 @@ class JointPosMultistep {
     for (let i = 0; i < this.steps; i++) {
       flattened.set(this.joint_pos_multistep[i], i * this.joint_names.length);
     }
+    // console.log(flattened.subarray(0, 12));
     return flattened;
   }
 }
@@ -207,7 +208,7 @@ class PrevActions {
     for (let i = 0; i < this.steps; i++) {
       flattened.set(this.actionBuffer[i], i * this.numActions);
     }
-    console.log("prevActions", flattened);
+    // console.log("prevActions", flattened);
     return flattened;
   }
 }
