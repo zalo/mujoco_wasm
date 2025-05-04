@@ -1,9 +1,9 @@
-import * as THREE           from 'three';
-import { GUI              } from '../node_modules/three/examples/jsm/libs/lil-gui.module.min.js';
-import { OrbitControls    } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
+import * as THREE from 'three';
+import { GUI } from '../node_modules/three/examples/jsm/libs/lil-gui.module.min.js';
+import { OrbitControls } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { DragStateManager } from './utils/DragStateManager.js';
 import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
-import   load_mujoco        from '../dist/mujoco_wasm.js';
+import load_mujoco from '../dist/mujoco_wasm.js';
 
 // Load the MuJoCo Module
 const mujoco = await load_mujoco();
@@ -27,7 +27,7 @@ class ONNXModule {
     const modelResponse = await fetch(this.modelPath);
     const modelArrayBuffer = await modelResponse.arrayBuffer();
     const meta = await (fetch(this.metaPath).then(response => response.json()));
-    
+
     this.inKeys = meta["in_keys"];
     this.outKeys = meta["out_keys"];
 
@@ -61,6 +61,7 @@ class ONNXModule {
 
 // Observation helper classes
 import { BaseAngVelMultistep, GravityMultistep, JointPosMultistep, JointVelMultistep, PrevActions } from './observationHelpers.js';
+import { TimerNode } from 'three/examples/jsm/nodes/Nodes.js';
 export class MuJoCoDemo {
   constructor() {
     this.mujoco = mujoco;
@@ -69,35 +70,35 @@ export class MuJoCoDemo {
     // Just initialize basic parameters here
     this.params = { scene: initialScene, paused: false, help: false, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0 };
     this.mujoco_time = 0.0;
-    this.bodies  = {}, this.lights = {};
+    this.bodies = {}, this.lights = {};
     this.jointNamesMJC = [];
     this.updateGUICallbacks = [];
 
-    this.container = document.createElement( 'div' );
-    document.body.appendChild( this.container );
+    this.container = document.createElement('div');
+    document.body.appendChild(this.container);
 
     this.scene = new THREE.Scene();
     this.scene.name = 'scene';
 
-    this.camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.001, 100 );
+    this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 100);
     this.camera.name = 'PerspectiveCamera';
     this.camera.position.set(2.0, 1.7, 1.7);
     this.scene.add(this.camera);
 
     this.scene.background = new THREE.Color(0.15, 0.25, 0.35);
-    this.scene.fog = new THREE.Fog(this.scene.background, 15, 25.5 );
+    this.scene.fog = new THREE.Fog(this.scene.background, 15, 25.5);
 
-    this.ambientLight = new THREE.AmbientLight( 0xffffff, 0.1 );
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
     this.ambientLight.name = 'AmbientLight';
-    this.scene.add( this.ambientLight );
+    this.scene.add(this.ambientLight);
 
-    this.renderer = new THREE.WebGLRenderer( { antialias: true } );
-    this.renderer.setPixelRatio( window.devicePixelRatio );
-    this.renderer.setSize( window.innerWidth, window.innerHeight );
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
 
-    this.container.appendChild( this.renderer.domElement );
+    this.container.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.target.set(0, 0.7, 0);
@@ -129,9 +130,9 @@ export class MuJoCoDemo {
         matrix: new THREE.Matrix4()
       }
     };
-    
+
     this.renderer.setAnimationLoop(this.render.bind(this));
-    
+
     // Start the main simulation loop
     this.main_loop();
   }
@@ -149,8 +150,8 @@ export class MuJoCoDemo {
     // Initialize the three.js Scene using the .xml Model
     [this.model, this.state, this.simulation, this.bodies, this.lights] =
       await loadSceneFromURL(mujoco, initialScene, this);
-    
-      // Parse joint names
+
+    // Parse joint names
     console.log("model.njnt", this.model.njnt);
     const textDecoder = new TextDecoder();
     const names_array = new Uint8Array(this.model.names);
@@ -214,52 +215,63 @@ export class MuJoCoDemo {
       const loopStart = performance.now();
 
       if (!this.params["paused"] && this.model && this.state && this.simulation && this.observations) {
+
+        let time_start = performance.now();
         // Run policy inference
-        if (this.simStepCount % this.decimation == 0) {
-          const quat = this.simulation.qpos.subarray(3, 7);
-          this.quat = new THREE.Quaternion(quat[1], quat[2], quat[3], quat[0]);
-          this.rpy.setFromQuaternion(this.quat);
-          const command = this.getCommand();
-          const policy = this.getObservations(this.simulation);
-          await this.runInference(command, policy);
-        }
+        const quat = this.simulation.qpos.subarray(3, 7);
+        this.quat = new THREE.Quaternion(quat[1], quat[2], quat[3], quat[0]);
+        this.rpy.setFromQuaternion(this.quat);
+        const command = this.getCommand();
+        const policy = this.getObservations(this.simulation);
+        await this.runInference(command, policy);
 
-        // Apply control torque
-        if (this.lastActions) {
-          const jpos = this.qposAdr.map(adr => this.simulation.qpos[adr]);
-          const jvel = this.qvelAdr.map(adr => this.simulation.qvel[adr]);
-          for (let i = 0; i < this.simulation.ctrl.length; i++) {
-            const j = this.isaac2mjc[i];
-            const targetJpos = 0.5 * this.lastActions[j] + this.defaultJpos[j];
-            const torque = this.jntKp[i] * (targetJpos - jpos[i]) + this.jntKd[i] * (0 - jvel[i]);
-            this.simulation.ctrl[i] = torque;
-          }
-        }
+        let time_end = performance.now();
+        const policy_inference_time = time_end - time_start;
+        time_start = time_end;
 
-        // Handle perturbations
-        for (let i = 0; i < this.simulation.qfrc_applied.length; i++) { 
-          this.simulation.qfrc_applied[i] = 0.0; 
-        }
-        let dragged = this.dragStateManager.physicsObject;
-        if (dragged && dragged.bodyID) {
-          for (let b = 0; b < this.model.nbody; b++) {
-            if (this.bodies[b]) {
-              getPosition  (this.simulation.xpos , b, this.bodies[b].position);
-              getQuaternion(this.simulation.xquat, b, this.bodies[b].quaternion);
-              this.bodies[b].updateWorldMatrix();
+        // step simulation for decimation times
+        for (let substep = 0; substep < self.decimation; substep++) {
+          // Apply control torque
+          if (this.lastActions) {
+            const jpos = this.qposAdr.map(adr => this.simulation.qpos[adr]);
+            const jvel = this.qvelAdr.map(adr => this.simulation.qvel[adr]);
+            for (let i = 0; i < this.simulation.ctrl.length; i++) {
+              const j = this.isaac2mjc[i];
+              const targetJpos = 0.5 * this.lastActions[j] + this.defaultJpos[j];
+              const torque = this.jntKp[i] * (targetJpos - jpos[i]) + this.jntKd[i] * (0 - jvel[i]);
+              this.simulation.ctrl[i] = torque;
             }
           }
-          let bodyID = dragged.bodyID;
-          this.dragStateManager.update(); // Update the world-space force origin
-          let force = toMujocoPos(this.dragStateManager.currentWorld.clone().sub(this.dragStateManager.worldHit).multiplyScalar(this.model.body_mass[bodyID] * 250));
-          let point = toMujocoPos(this.dragStateManager.worldHit.clone());
-          this.simulation.applyForce(force.x, force.y, force.z, 0, 0, 0, point.x, point.y, point.z, bodyID);
-        }
 
-        // Step simulation
-        this.simulation.step();
-        this.mujoco_time += this.timestep * 1000.0;
-        this.simStepCount += 1;
+          // Handle perturbations
+          for (let i = 0; i < this.simulation.qfrc_applied.length; i++) {
+            this.simulation.qfrc_applied[i] = 0.0;
+          }
+          let dragged = this.dragStateManager.physicsObject;
+          if (dragged && dragged.bodyID) {
+            for (let b = 0; b < this.model.nbody; b++) {
+              if (this.bodies[b]) {
+                getPosition(this.simulation.xpos, b, this.bodies[b].position);
+                getQuaternion(this.simulation.xquat, b, this.bodies[b].quaternion);
+                this.bodies[b].updateWorldMatrix();
+              }
+            }
+            let bodyID = dragged.bodyID;
+            this.dragStateManager.update(); // Update the world-space force origin
+            // TODO: add damping force, need to add body velocity sensor
+            let force = toMujocoPos(this.dragStateManager.currentWorld.clone().sub(this.dragStateManager.worldHit).multiplyScalar(this.model.body_mass[bodyID] * 250));
+            let point = toMujocoPos(this.dragStateManager.worldHit.clone());
+            this.simulation.applyForce(force.x, force.y, force.z, 0, 0, 0, point.x, point.y, point.z, bodyID);
+          }
+
+          // Step simulation
+          this.simulation.step();
+          this.mujoco_time += this.timestep * 1000.0;
+          this.simStepCount += 1;
+        }
+        time_end = performance.now();
+        const sim_step_time = time_end - time_start;
+        time_start = time_end;
 
         // Update cached state for renderer
         for (let b = 0; b < this.model.nbody; b++) {
@@ -322,15 +334,24 @@ export class MuJoCoDemo {
           }
           this.lastSimState.tendons.numWraps = numWraps;
         }
+
+        time_end = performance.now();
+        const update_render_time = time_end - time_start;
+
+        if ((self.simStepCount / this.decimation) % 50 == 0) {
+          console.log("policy inference time:", policy_inference_time / 1000);
+          console.log("sim_step_time:", sim_step_time / 1000);
+          console.log("update_render_time:", update_render_time / 1000)
+        }
       }
 
       // Calculate time to sleep
       const loopEnd = performance.now();
       const elapsed = (loopEnd - loopStart) / 1000;
-      const sleepTime = Math.max(0, this.timestep - elapsed);
+      const sleepTime = Math.max(0, this.timestep * this.decimation - elapsed);
 
       // calculate actual frequency
-      if ((this.simStepCount / this.decimation) % 50 == 0){
+      if ((this.simStepCount / this.decimation) % 50 == 0) {
         const actualFreq = 1 / (elapsed + sleepTime);
         console.log("elapsed", elapsed);
         console.log("timestep", this.timestep);
@@ -452,7 +473,7 @@ export class MuJoCoDemo {
 
     // Update tendon visualization from pre-computed data
     if (this.mujocoRoot && this.mujocoRoot.cylinders) {
-      const {numWraps} = this.lastSimState.tendons.numWraps;
+      const { numWraps } = this.lastSimState.tendons.numWraps;
       this.mujocoRoot.cylinders.count = numWraps;
       this.mujocoRoot.spheres.count = numWraps > 0 ? numWraps + 1 : 0;
       this.mujocoRoot.cylinders.instanceMatrix.needsUpdate = true;
