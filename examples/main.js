@@ -230,7 +230,7 @@ export class MuJoCoDemo {
         time_start = time_end;
 
         // step simulation for decimation times
-        for (let substep = 0; substep < self.decimation; substep++) {
+        for (let substep = 0; substep < this.decimation; substep++) {
           // Apply control torque
           if (this.lastActions) {
             const jpos = this.qposAdr.map(adr => this.simulation.qpos[adr]);
