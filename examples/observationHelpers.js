@@ -203,12 +203,14 @@ class PrevActions {
    * @returns {Float32Array}
    */
   compute(extra_info) {
-    // Flatten all steps
     const flattened = new Float32Array(this.steps * this.numActions);
+    let idx = 0;
+    // 先遍历原矩阵的列（转置后的行），再遍历原矩阵的行（转置后的列）
+    for (let j = 0; j < this.numActions; j++) {
     for (let i = 0; i < this.steps; i++) {
-      flattened.set(this.actionBuffer[i], i * this.numActions);
+      flattened[idx++] = this.actionBuffer[i][j];
     }
-    // console.log("prevActions", flattened);
+    }
     return flattened;
   }
 }

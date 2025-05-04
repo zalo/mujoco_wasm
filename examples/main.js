@@ -201,21 +201,19 @@ export class MuJoCoDemo {
     // console.log(this.model.timeMS);
 
     // set up observations
-    this.observations = {
+    this.observations = [
       // base_angvel_multistep: new BaseAngVelMultistep(this.model, this.simulation, this, "free_joint", steps=3),
-      gravity_multistep: new GravityMultistep(this.model, this.simulation, this, "free_joint", 3),
-      joint_pos_multistep: new JointPosMultistep(this.model, this.simulation, this, this.jointNamesIsaac, 3),
-      joint_vel_multistep: new JointVelMultistep(this.model, this.simulation, this, this.jointNamesIsaac, 3),
-      prev_actions: new PrevActions(this.model, this.simulation, this, 3)
-    };
+      new GravityMultistep(this.model, this.simulation, this, "free_joint", 3),
+      new JointPosMultistep(this.model, this.simulation, this, this.jointNamesIsaac, 3),
+      new JointVelMultistep(this.model, this.simulation, this, this.jointNamesIsaac, 3),
+      new PrevActions(this.model, this.simulation, this, 3)
+    ];
   }
 
   async main_loop() {
     while (true) {
       const loopStart = performance.now();
-
-      if (!this.params["paused"] && this.model && this.state && this.simulation && this.observations) {
-
+      if (!this.params["paused"] && this.model != null && this.state != null && this.simulation != null && this.observations != null) {
         let time_start = performance.now();
         // Run policy inference
         const quat = this.simulation.qpos.subarray(3, 7);
@@ -230,7 +228,7 @@ export class MuJoCoDemo {
         time_start = time_end;
 
         // step simulation for decimation times
-        for (let substep = 0; substep < self.decimation; substep++) {
+        for (let substep = 0; substep < this.decimation; substep++) {
           // Apply control torque
           if (this.lastActions) {
             const jpos = this.qposAdr.map(adr => this.simulation.qpos[adr]);
@@ -259,7 +257,8 @@ export class MuJoCoDemo {
             let bodyID = dragged.bodyID;
             this.dragStateManager.update(); // Update the world-space force origin
             // TODO: add damping force, need to add body velocity sensor
-            let force = toMujocoPos(this.dragStateManager.currentWorld.clone().sub(this.dragStateManager.worldHit).multiplyScalar(this.model.body_mass[bodyID] * 250));
+            let force = toMujocoPos(this.dragStateManager.currentWorld.clone().sub(this.dragStateManager.worldHit).multiplyScalar(25));
+            console.log("force", force);
             let point = toMujocoPos(this.dragStateManager.worldHit.clone());
             this.simulation.applyForce(force.x, force.y, force.z, 0, 0, 0, point.x, point.y, point.z, bodyID);
           }
@@ -337,8 +336,8 @@ export class MuJoCoDemo {
 
         time_end = performance.now();
         const update_render_time = time_end - time_start;
-
-        if ((self.simStepCount / this.decimation) % 50 == 0) {
+        console.log("simStepCount", this.simStepCount)
+        if ((self.simStepCount) % (50 * this.decimation) == 0) {
           console.log("policy inference time:", policy_inference_time / 1000);
           console.log("sim_step_time:", sim_step_time / 1000);
           console.log("update_render_time:", update_render_time / 1000)
@@ -351,7 +350,7 @@ export class MuJoCoDemo {
       const sleepTime = Math.max(0, this.timestep * this.decimation - elapsed);
 
       // calculate actual frequency
-      if ((this.simStepCount / this.decimation) % 50 == 0) {
+      if ((this.simStepCount) % (50 * this.decimation) == 0) {
         const actualFreq = 1 / (elapsed + sleepTime);
         console.log("elapsed", elapsed);
         console.log("timestep", this.timestep);
@@ -381,7 +380,15 @@ export class MuJoCoDemo {
         "adapt_hx": new ort.Tensor('float32', this.adapt_hx, [1, 128])
       }
       const result = await this.policy.runInference(input);
-      this.lastActions = result["action"];
+      if (this.lastActions !== null) {
+        // debugger;
+        for (let i = 0; i < this.lastActions.length; i++) {
+          this.lastActions[i] = this.lastActions[i] * 0.8 + result["action"][i] * 0.2;
+        }
+      } else {
+        this.lastActions = result["action"];
+      }
+      console.log("lastActions", this.lastActions);
       for (let i = this.actionBuffer.length - 1; i > 0; i--) {
         this.actionBuffer[i] = this.actionBuffer[i - 1];
       }
@@ -436,7 +443,7 @@ export class MuJoCoDemo {
 
   getObservations(simulation) {
     let allObservations = [];
-    for (const obs_func of Object.values(this.observations)) {
+    for (const obs_func of this.observations) {
       const obs = obs_func.compute(simulation);
       if (obs.some(isNaN)) {
         console.log("NaN in observation", obs_func.constructor.name);
@@ -454,7 +461,6 @@ export class MuJoCoDemo {
     const render_start = performance.now();
     
     this.controls.update();
-
     // Update threejs scene from cached simulation state
     for (const [b, state] of this.lastSimState.bodies) {
       if (this.bodies[b]) {
@@ -486,7 +492,7 @@ export class MuJoCoDemo {
     const render_end = performance.now();
     if ((this.simStepCount / this.decimation) % 50 == 0) {
       const render_time = render_end - render_start;
-      console.log("render time", render_time);
+      // console.log("render time", render_time);
     }
   }
 }
