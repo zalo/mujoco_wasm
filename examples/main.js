@@ -119,7 +119,8 @@ export class MuJoCoDemo {
     this.isInferencing = false;
     // this.modelPath = './examples/checkpoints/20250410_121925/model_14000.onnx';
     // this.modelPath = './examples/checkpoints/policy-05-02_23-55.onnx';
-    this.modelPath = './examples/checkpoints/policy-05-03_21-31.onnx';
+    // this.modelPath = './examples/checkpoints/policy-05-03_21-31.onnx';
+    this.modelPath = './examples/checkpoints/vanilla.onnx';
 
     // Pre-allocate reusable objects to avoid garbage collection
     this.lastSimState = {
@@ -222,7 +223,8 @@ export class MuJoCoDemo {
         const quat = this.simulation.qpos.subarray(3, 7);
         this.quat = new THREE.Quaternion(quat[1], quat[2], quat[3], quat[0]);
         this.rpy.setFromQuaternion(this.quat);
-        const command = this.getCommand();
+        // const command = this.getImpedanceCommand(this.simulation);
+        const command = this.getVelocityCommand(this.simulation);
         const policy = this.getObservations(this.simulation);
         await this.runInference(command, policy);
 
@@ -377,7 +379,7 @@ export class MuJoCoDemo {
     this.inferenceStepCount += 1;
     try {
       const input = {
-        "command": new ort.Tensor('float32', new Float32Array(command), [1, 27]),
+        "command_": new ort.Tensor('float32', new Float32Array(command), [1, command.length]),
         "policy": new ort.Tensor('float32', new Float32Array(policy), [1, policy.length]),
         "is_init": new ort.Tensor('bool', [false], [1]),
         "adapt_hx": new ort.Tensor('float32', this.adapt_hx, [1, 128])
@@ -413,7 +415,7 @@ export class MuJoCoDemo {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
-  getCommand(simulation) {
+  getOscillator(simulation) {
     const omega = 4.0 * Math.PI
     const time = this.mujoco_time / 1000.;
     // const time = 0.;
@@ -423,9 +425,13 @@ export class MuJoCoDemo {
       omega * time,
       omega * time + Math.PI,
     ];
+    return [...phase.map(Math.sin), ...phase.map(Math.cos), omega, omega, omega, omega];
+  }
+
+  getImpedanceCommand(simulation) {
     const kp = this.impedance_kp;
     const kd = this.impedance_kd;
-    const osc = [...phase.map(Math.sin), ...phase.map(Math.cos), omega, omega, omega, omega];
+    const osc = this.getOscillator(simulation);
     const base_pos_w = new THREE.Vector3(...this.simulation.qpos.subarray(0, 3));
     // const setpoint = new THREE.Vector3(0, 0, 0);
     const setvel = new THREE.Vector3(1., 0., 0.);
@@ -444,6 +450,11 @@ export class MuJoCoDemo {
       kd / mass, kd / mass, kd / mass
     ];
     return [...command, ...osc];
+  }
+
+  getVelocityCommand(simulation) {
+    const osc = this.getOscillator(simulation);
+    return [1., 0., (0-this.rpy.z), 0, ...osc];
   }
 
   getObservations(simulation) {

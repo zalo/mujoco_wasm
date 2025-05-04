@@ -1,0 +1,53 @@
+{
+    "in_keys": [
+        "policy",
+        "is_init",
+        "adapt_hx",
+        "command_"
+    ],
+    "out_keys": [
+        "policy",
+        "priv_pred",
+        "ext_pred",
+        [
+            "info",
+            "ext_rec"
+        ],
+        [
+            "next",
+            "adapt_hx"
+        ],
+        "_actor_inp",
+        "_actor_feature",
+        "loc",
+        "scale",
+        "flag",
+        "action",
+        "sample_log_prob",
+        "retro_inp",
+        "retro_feat",
+        [
+            "info",
+            "retro_pred"
+        ]
+    ],
+    "in_shapes": [
+        [
+            [
+                1,
+                117
+            ],
+            [
+                1
+            ],
+            [
+                1,
+                128
+            ],
+            [
+                1,
+                16
+            ]
+        ]
+    ]
+}
