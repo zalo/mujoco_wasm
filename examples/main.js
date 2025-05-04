@@ -1,77 +1,29 @@
 import * as THREE from 'three';
+import * as ort from 'onnxruntime-web';
 import { GUI } from '../node_modules/three/examples/jsm/libs/lil-gui.module.min.js';
 import { OrbitControls } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { DragStateManager } from './utils/DragStateManager.js';
-import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
-import load_mujoco from '../dist/mujoco_wasm.js';
+import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, getPosition, getQuaternion, toMujocoPos, standardNormal, reloadScene, reloadPolicy } from './mujocoUtils.js';
 
 // Load the MuJoCo Module
+import load_mujoco from '../dist/mujoco_wasm.js';
 const mujoco = await load_mujoco();
 
-import * as ort from 'onnxruntime-web';
 // Set up Emscripten's Virtual File System
-// var initialScene = "humanoid.xml";
 var initialScene = "unitree_go2/scene.xml";
-// var initialScene = "unitree_g1/scene.xml";
 mujoco.FS.mkdir('/working');
 mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
 
-class ONNXModule {
-  constructor(modelPath) {
-    this.modelPath = modelPath;
-    this.metaPath = modelPath.replace('.onnx', '.json');
-  }
-
-  async init() {
-    // Load the ONNX model
-    const modelResponse = await fetch(this.modelPath);
-    const modelArrayBuffer = await modelResponse.arrayBuffer();
-    const meta = await (fetch(this.metaPath).then(response => response.json()));
-
-    this.inKeys = meta["in_keys"];
-    this.outKeys = meta["out_keys"];
-
-    // Create session from the array buffer
-    this.session = await ort.InferenceSession.create(modelArrayBuffer, {
-      executionProviders: ['wasm'],
-      graphOptimizationLevel: 'all'
-    });
-
-    console.log('ONNX model loaded successfully');
-    console.log(this.session.inputNames);
-    console.log(this.session.outputNames);
-  }
-
-  async runInference(input) {
-    let onnxInput = {};
-    for (let i = 0; i < this.inKeys.length; i++) {
-      onnxInput[this.session.inputNames[i]] = input[this.inKeys[i]];
-    }
-    // const inferenceStart = performance.now();
-    const onnxOutput = await this.session.run(onnxInput);
-    // const inferenceEnd = performance.now();
-    // console.log("inference time", inferenceEnd - inferenceStart)
-    let result = {};
-    for (let i = 0; i < this.outKeys.length; i++) {
-      result[this.outKeys[i]] = onnxOutput[this.session.outputNames[i]].data;
-    }
-    return result;
-  }
-}
-
-// Observation helper classes
-import { BaseAngVelMultistep, GravityMultistep, JointPosMultistep, JointVelMultistep, PrevActions } from './observationHelpers.js';
-import { TimerNode } from 'three/examples/jsm/nodes/Nodes.js';
 export class MuJoCoDemo {
   constructor() {
     this.mujoco = mujoco;
 
-    // Move model loading to init()
-    // Just initialize basic parameters here
-    this.params = { scene: initialScene, paused: false, help: false, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0 };
-    this.mujoco_time = 0.0;
+    this.params = { scene: initialScene, paused: true, help: false, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0, policy: './examples/checkpoints/policy-05-03_21-31.onnx' };
+    this.lastActions = null;
+    this.isInferencing = false;
+    this.observations = {}
+
     this.bodies = {}, this.lights = {};
-    this.jointNamesMJC = [];
     this.updateGUICallbacks = [];
 
     this.container = document.createElement('div');
@@ -113,16 +65,6 @@ export class MuJoCoDemo {
 
     this.dragStateManager = new DragStateManager(this.scene, this.renderer, this.camera, this.container.parentElement, this.controls);
 
-    // Add new properties for ONNX Runtime
-    this.session = null;
-    this.lastActions = null;
-    this.isInferencing = false;
-    // this.modelPath = './examples/checkpoints/20250410_121925/model_14000.onnx';
-    // this.modelPath = './examples/checkpoints/policy-05-02_23-55.onnx';
-    // this.modelPath = './examples/checkpoints/policy-05-03_21-31.onnx';
-    this.modelPath = './examples/checkpoints/vanilla.onnx';
-
-    // Pre-allocate reusable objects to avoid garbage collection
     this.lastSimState = {
       bodies: new Map(),
       lights: new Map(),
@@ -133,85 +75,37 @@ export class MuJoCoDemo {
     };
 
     this.renderer.setAnimationLoop(this.render.bind(this));
-
-    // Start the main simulation loop
-    this.main_loop();
   }
 
   async init() {
     // Download the examples first
     await downloadExampleScenesFolder(mujoco);
 
-    // // Now load the initial model
-    console.log("initialScene", initialScene);
-    this.model = new mujoco.Model("/working/" + initialScene);
-    this.state = new mujoco.State(this.model);
-    this.simulation = new mujoco.Simulation(this.model, this.state);
-
     // Initialize the three.js Scene using the .xml Model
-    [this.model, this.state, this.simulation, this.bodies, this.lights] =
-      await loadSceneFromURL(mujoco, initialScene, this);
+    let reload_scene = reloadScene.bind(this);
+    await reload_scene();
 
-    // Parse joint names
-    console.log("model.njnt", this.model.njnt);
-    const textDecoder = new TextDecoder();
-    const names_array = new Uint8Array(this.model.names);
-
-    this.qposAdr = [];
-    this.qvelAdr = [];
-    for (let j = 0; j < this.model.njnt; j++) {
-      let start_idx = this.model.name_jntadr[j];
-      let end_idx = start_idx;
-      while (end_idx < names_array.length && names_array[end_idx] !== 0) {
-        end_idx++;
-      }
-      let name = textDecoder.decode(names_array.subarray(start_idx, end_idx));
-      if (this.model.jnt_type[j] == mujoco.mjtJoint.mjJNT_HINGE.value) {
-        this.jointNamesMJC.push(name);
-        this.qposAdr.push(this.model.jnt_qposadr[j]);
-        this.qvelAdr.push(this.model.jnt_dofadr[j]);
-      };
-    }
-    console.log("parsed jointName", this.jointNamesMJC);
-
-    const asset_meta = await fetch("./examples/checkpoints/asset_meta.json").then(response => response.json());
-    this.jointNamesIsaac = asset_meta["joint_names_isaac"];
-    this.isaac2mjc = this.jointNamesMJC.map(name => this.jointNamesIsaac.indexOf(name));
-    this.mjc2isaac = this.jointNamesIsaac.map(name => this.jointNamesMJC.indexOf(name));
-    this.numActions = this.jointNamesIsaac.length;
-    this.defaultJpos = new Float32Array(asset_meta["default_joint_pos"]);
-    this.jntKp = new Float32Array(this.numActions).fill(25.);
-    this.jntKd = new Float32Array(this.numActions).fill(0.5);
+    // Set up simulation parameters
     this.timestep = this.model.getOptions().timestep;
     this.decimation = Math.round(0.02 / this.timestep);
+    this.mujoco_time = 0.0;
     this.simStepCount = 0;
-    this.simTimeStamp = performance.now();
     this.inferenceStepCount = 0;
-    this.actionBuffer = new Array(4).fill().map(() => new Float32Array(this.numActions));
-    
-    this.impedance_kp = 12.;
-    this.impedance_kd = 0.8 * Math.sqrt(this.impedance_kp);
 
     console.log("timestep:", this.timestep, "decimation:", this.decimation);
 
-    this.gui = new GUI();
-    setupGUI(this);
-
-    this.policy = new ONNXModule(this.modelPath);
-    await this.policy.init();
     this.adapt_hx = new Float32Array(128);
     this.rpy = new THREE.Euler();
 
-    // console.log(this.model.timeMS);
+    // Reload policy
+    let reload_policy = reloadPolicy.bind(this);
+    await reload_policy();
 
-    // set up observations
-    this.observations = [
-      // base_angvel_multistep: new BaseAngVelMultistep(this.model, this.simulation, this, "free_joint", steps=3),
-      new GravityMultistep(this.model, this.simulation, this, "free_joint", 3),
-      new JointPosMultistep(this.model, this.simulation, this, this.jointNamesIsaac, 3),
-      new JointVelMultistep(this.model, this.simulation, this, this.jointNamesIsaac, 3),
-      new PrevActions(this.model, this.simulation, this, 3)
-    ];
+    this.jntKp = new Float32Array(this.numActions).fill(25.);
+    this.jntKd = new Float32Array(this.numActions).fill(0.5);
+
+    this.gui = new GUI();
+    setupGUI(this);
   }
 
   async main_loop() {
@@ -223,10 +117,8 @@ export class MuJoCoDemo {
         const quat = this.simulation.qpos.subarray(3, 7);
         this.quat = new THREE.Quaternion(quat[1], quat[2], quat[3], quat[0]);
         this.rpy.setFromQuaternion(this.quat);
-        // const command = this.getImpedanceCommand(this.simulation);
-        const command = this.getVelocityCommand(this.simulation);
-        const policy = this.getObservations(this.simulation);
-        await this.runInference(command, policy);
+        const obs_dict = this.getObservations(this.simulation);
+        await this.runInference(obs_dict);
 
         let time_end = performance.now();
         const policy_inference_time = time_end - time_start;
@@ -309,24 +201,24 @@ export class MuJoCoDemo {
         if (this.mujocoRoot && this.mujocoRoot.cylinders) {
           let numWraps = 0;
           const mat = this.lastSimState.tendons.matrix;
-          
+
           for (let t = 0; t < this.model.ntendon; t++) {
             let startW = this.simulation.ten_wrapadr[t];
             let r = this.model.tendon_width[t];
             for (let w = startW; w < startW + this.simulation.ten_wrapnum[t] - 1; w++) {
-              let tendonStart = getPosition(this.simulation.wrap_xpos, w    , new THREE.Vector3());
-              let tendonEnd   = getPosition(this.simulation.wrap_xpos, w + 1, new THREE.Vector3());
-              let tendonAvg   = new THREE.Vector3().addVectors(tendonStart, tendonEnd).multiplyScalar(0.5);
+              let tendonStart = getPosition(this.simulation.wrap_xpos, w, new THREE.Vector3());
+              let tendonEnd = getPosition(this.simulation.wrap_xpos, w + 1, new THREE.Vector3());
+              let tendonAvg = new THREE.Vector3().addVectors(tendonStart, tendonEnd).multiplyScalar(0.5);
 
               let validStart = tendonStart.length() > 0.01;
-              let validEnd   = tendonEnd  .length() > 0.01;
+              let validEnd = tendonEnd.length() > 0.01;
 
-              if (validStart) { this.mujocoRoot.spheres.setMatrixAt(numWraps    , mat.compose(tendonStart, new THREE.Quaternion(), new THREE.Vector3(r, r, r))); }
-              if (validEnd  ) { this.mujocoRoot.spheres.setMatrixAt(numWraps + 1, mat.compose(tendonEnd  , new THREE.Quaternion(), new THREE.Vector3(r, r, r))); }
+              if (validStart) { this.mujocoRoot.spheres.setMatrixAt(numWraps, mat.compose(tendonStart, new THREE.Quaternion(), new THREE.Vector3(r, r, r))); }
+              if (validEnd) { this.mujocoRoot.spheres.setMatrixAt(numWraps + 1, mat.compose(tendonEnd, new THREE.Quaternion(), new THREE.Vector3(r, r, r))); }
               if (validStart && validEnd) {
-                mat.compose(tendonAvg, 
+                mat.compose(tendonAvg,
                   new THREE.Quaternion().setFromUnitVectors(
-                    new THREE.Vector3(0, 1, 0), 
+                    new THREE.Vector3(0, 1, 0),
                     tendonEnd.clone().sub(tendonStart).normalize()
                   ),
                   new THREE.Vector3(r, tendonStart.distanceTo(tendonEnd), r)
@@ -341,7 +233,6 @@ export class MuJoCoDemo {
 
         time_end = performance.now();
         const update_render_time = time_end - time_start;
-        // console.log("simStepCount", this.simStepCount);
         if ((this.simStepCount) % (50 * this.decimation) == 0) {
           console.log("policy inference time:", policy_inference_time / 1000);
           console.log("sim_step_time:", sim_step_time / 1000);
@@ -367,7 +258,7 @@ export class MuJoCoDemo {
     }
   }
 
-  async runInference(command, policy) {
+  async runInference(obs_dict) {
     if (!this.policy || this.isInferencing) {
       console.log("inference lag");
       return;
@@ -378,13 +269,19 @@ export class MuJoCoDemo {
     this.isInferencing = true;
     this.inferenceStepCount += 1;
     try {
+      // Create input object with initial tensors
       const input = {
-        "command_": new ort.Tensor('float32', new Float32Array(command), [1, command.length]),
-        "policy": new ort.Tensor('float32', new Float32Array(policy), [1, policy.length]),
         "is_init": new ort.Tensor('bool', [false], [1]),
         "adapt_hx": new ort.Tensor('float32', this.adapt_hx, [1, 128])
+      };
+
+      // Convert observation arrays to tensors and add to input
+      for (const [key, value] of Object.entries(obs_dict)) {
+        input[key] = new ort.Tensor('float32', value, [1, value.length]);
       }
+
       const result = await this.policy.runInference(input);
+
       if (this.lastActions !== null) {
         // debugger;
         for (let i = 0; i < this.lastActions.length; i++) {
@@ -415,58 +312,20 @@ export class MuJoCoDemo {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
-  getOscillator(simulation) {
-    const omega = 4.0 * Math.PI
-    const time = this.mujoco_time / 1000.;
-    // const time = 0.;
-    const phase = [
-      omega * time + Math.PI,
-      omega * time,
-      omega * time,
-      omega * time + Math.PI,
-    ];
-    return [...phase.map(Math.sin), ...phase.map(Math.cos), omega, omega, omega, omega];
-  }
-
-  getImpedanceCommand(simulation) {
-    const kp = this.impedance_kp;
-    const kd = this.impedance_kd;
-    const osc = this.getOscillator(simulation);
-    const base_pos_w = new THREE.Vector3(...this.simulation.qpos.subarray(0, 3));
-    // const setpoint = new THREE.Vector3(0, 0, 0);
-    const setvel = new THREE.Vector3(1., 0., 0.);
-    const setpoint = setvel.multiplyScalar(kd/kp).add(base_pos_w);
-    const mass = 1.;
-    let setpoint_b = setpoint.sub(base_pos_w).applyQuaternion(this.quat.invert());
-    // console.log(this.rpy);
-    const command = [
-      setpoint_b.x, setpoint_b.y,
-      0. - this.rpy.z,
-      kp * setpoint_b.x, kp * setpoint_b.y,
-      kd, kd, kd,
-      kp * (0. - this.rpy.z),
-      mass,
-      kp * setpoint_b.x / mass, kp * setpoint_b.y / mass,
-      kd / mass, kd / mass, kd / mass
-    ];
-    return [...command, ...osc];
-  }
-
-  getVelocityCommand(simulation) {
-    const osc = this.getOscillator(simulation);
-    return [1., 0., (0-this.rpy.z), 0, ...osc];
-  }
-
   getObservations(simulation) {
-    let allObservations = [];
-    for (const obs_func of this.observations) {
-      const obs = obs_func.compute(simulation);
-      if (obs.some(isNaN)) {
-        console.log("NaN in observation", obs_func.constructor.name);
+    let obs_dict = {};
+    for (const [obs_key, obs_funcs] of Object.entries(this.observations)) {
+      let obs_for_this_key = [];
+      for (const obs_func of obs_funcs) {
+        const obs = obs_func.compute(simulation);
+        if (obs.some(isNaN)) {
+          console.log("NaN in observation", obs_func.constructor.name);
+        }
+        obs_for_this_key.push(...obs);
       }
-      allObservations.push(...obs);
+      obs_dict[obs_key] = obs_for_this_key;
     }
-    return allObservations;
+    return obs_dict;
   }
 
   render() {
@@ -475,7 +334,7 @@ export class MuJoCoDemo {
     }
 
     const render_start = performance.now();
-    
+
     this.controls.update();
     // Update threejs scene from cached simulation state
     for (const [b, state] of this.lastSimState.bodies) {
@@ -515,3 +374,5 @@ export class MuJoCoDemo {
 
 let demo = new MuJoCoDemo();
 await demo.init();
+demo.params["paused"] = false;
+demo.main_loop();

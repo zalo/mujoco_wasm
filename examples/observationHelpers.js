@@ -1,6 +1,79 @@
 import * as THREE from 'three';
 
-class BaseAngVelMultistep {
+function getOscillator(time) {
+  const omega = 4.0 * Math.PI
+  const phase = [
+    omega * time + Math.PI,
+    omega * time, 
+    omega * time,
+    omega * time + Math.PI,
+  ];
+  return [...phase.map(Math.sin), ...phase.map(Math.cos), omega, omega, omega, omega];
+}
+
+export class VelocityCommand {
+  constructor(model, simulation, demo) {
+    this.model = model;
+    this.simulation = simulation;
+    this.demo = demo;
+  }
+
+  compute(extra_info) {
+    const osc = getOscillator(this.demo.mujoco_time / 1000.);
+    return [1., 0., (0 - this.demo.rpy.z), 0, ...osc];
+  }
+  
+}
+
+
+export class ImpedanceCommand {
+  constructor(model, simulation, demo) {
+    this.model = model;
+    this.simulation = simulation;
+    this.demo = demo;
+    // Add impedance control parameters
+    this.impedance_kp = 100.0; // Position gain
+    this.impedance_kd = 20.0;  // Velocity gain
+  }
+
+  compute(extra_info) {
+    const kp = this.impedance_kp;
+    const kd = this.impedance_kd;
+    const osc = getOscillator(this.demo.mujoco_time / 1000.);
+    
+    // Get base position in world frame
+    const base_pos_w = new THREE.Vector3(...this.simulation.qpos.subarray(0, 3));
+    const setvel = new THREE.Vector3(1.0, 0.0, 0.0);
+    const setpoint = setvel.multiplyScalar(kd / kp).add(base_pos_w);
+    const mass = 1.0;
+
+    // Get quaternion from simulation
+    const quat = new THREE.Quaternion(
+      this.simulation.qpos[4], // x
+      this.simulation.qpos[5], // y
+      this.simulation.qpos[6], // z
+      this.simulation.qpos[3]  // w
+    );
+
+    // Transform setpoint to body frame
+    let setpoint_b = setpoint.sub(base_pos_w).applyQuaternion(quat.clone().invert());
+
+    const command = [
+      setpoint_b.x, setpoint_b.y,
+      0 - this.demo.rpy.z,
+      kp * setpoint_b.x, kp * setpoint_b.y,
+      kd, kd, kd,
+      kp * (0 - this.demo.rpy.z),
+      mass,
+      kp * setpoint_b.x / mass, kp * setpoint_b.y / mass,
+      kd / mass, kd / mass, kd / mass
+    ];
+    
+    return [...command, ...osc];
+  }
+}
+
+export class BaseAngVelMultistep {
   /**
    * 
    * @param {mujoco.Model} model 
@@ -36,7 +109,7 @@ class BaseAngVelMultistep {
   }
 }
 
-class GravityMultistep {
+export class GravityMultistep {
   /**
    * 
    * @param {mujoco.Model} model 
@@ -83,7 +156,7 @@ class GravityMultistep {
   }
 }
 
-class JointPosMultistep {
+export class JointPosMultistep {
   /**
    * 
    * @param {mujoco.Model} model 
@@ -132,7 +205,7 @@ class JointPosMultistep {
   }
 }
 
-class JointVelMultistep {
+export class JointVelMultistep {
   /**
    * 
    * @param {mujoco.Model} model 
@@ -181,7 +254,7 @@ class JointVelMultistep {
   }
 }
 
-class PrevActions {
+export class PrevActions {
   /**
    * 
    * @param {mujoco.Model} model 
@@ -214,5 +287,3 @@ class PrevActions {
     return flattened;
   }
 }
-
-export { BaseAngVelMultistep, GravityMultistep, JointPosMultistep, JointVelMultistep, PrevActions };
