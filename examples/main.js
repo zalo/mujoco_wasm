@@ -337,7 +337,7 @@ export class MuJoCoDemo {
         time_end = performance.now();
         const update_render_time = time_end - time_start;
         console.log("simStepCount", this.simStepCount)
-        if ((self.simStepCount) % (50 * this.decimation) == 0) {
+        if ((this.simStepCount) % (50 * this.decimation) == 0) {
           console.log("policy inference time:", policy_inference_time / 1000);
           console.log("sim_step_time:", sim_step_time / 1000);
           console.log("update_render_time:", update_render_time / 1000)
