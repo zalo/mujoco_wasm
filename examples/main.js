@@ -187,6 +187,9 @@ export class MuJoCoDemo {
     this.simTimeStamp = performance.now();
     this.inferenceStepCount = 0;
     this.actionBuffer = new Array(4).fill().map(() => new Float32Array(this.numActions));
+    
+    this.impedance_kp = 12.;
+    this.impedance_kd = 0.8 * Math.sqrt(this.impedance_kp);
 
     console.log("timestep:", this.timestep, "decimation:", this.decimation);
 
@@ -336,7 +339,7 @@ export class MuJoCoDemo {
 
         time_end = performance.now();
         const update_render_time = time_end - time_start;
-        console.log("simStepCount", this.simStepCount)
+        // console.log("simStepCount", this.simStepCount);
         if ((this.simStepCount) % (50 * this.decimation) == 0) {
           console.log("policy inference time:", policy_inference_time / 1000);
           console.log("sim_step_time:", sim_step_time / 1000);
@@ -388,7 +391,7 @@ export class MuJoCoDemo {
       } else {
         this.lastActions = result["action"];
       }
-      console.log("lastActions", this.lastActions);
+      // console.log("lastActions", this.lastActions);
       for (let i = this.actionBuffer.length - 1; i > 0; i--) {
         this.actionBuffer[i] = this.actionBuffer[i - 1];
       }
@@ -420,20 +423,22 @@ export class MuJoCoDemo {
       omega * time,
       omega * time + Math.PI,
     ];
+    const kp = this.impedance_kp;
+    const kd = this.impedance_kd;
     const osc = [...phase.map(Math.sin), ...phase.map(Math.cos), omega, omega, omega, omega];
-    const setpoint = new THREE.Vector3(0, 0, 0);
     const base_pos_w = new THREE.Vector3(...this.simulation.qpos.subarray(0, 3));
-    const kp = 12.;
-    const kd = 1.8 * Math.sqrt(kp);
+    // const setpoint = new THREE.Vector3(0, 0, 0);
+    const setvel = new THREE.Vector3(1., 0., 0.);
+    const setpoint = setvel.multiplyScalar(kd/kp).add(base_pos_w);
     const mass = 1.;
     let setpoint_b = setpoint.sub(base_pos_w).applyQuaternion(this.quat.invert());
-
+    // console.log(this.rpy);
     const command = [
       setpoint_b.x, setpoint_b.y,
-      0. - this.rpy.y,
+      0. - this.rpy.z,
       kp * setpoint_b.x, kp * setpoint_b.y,
       kd, kd, kd,
-      kp * (0. - this.rpy.y),
+      kp * (0. - this.rpy.z),
       mass,
       kp * setpoint_b.x / mass, kp * setpoint_b.y / mass,
       kd / mass, kd / mass, kd / mass
