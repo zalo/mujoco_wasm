@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Reflector } from './utils/Reflector.js';
 import { MuJoCoDemo } from './main.js';
-import { BaseAngVelMultistep, GravityMultistep, JointPosMultistep, JointVelMultistep, PrevActions, VelocityCommand, ImpedanceCommand } from './observationHelpers.js';
+import { Observations } from './observationHelpers.js';
 import { ONNXModule } from './onnxHelper.js';
 
 export async function reloadScene() {
@@ -66,24 +66,6 @@ export async function reloadScene() {
   this.numActions = this.jointNamesIsaac.length;
   this.actionBuffer = new Array(4).fill().map(() => new Float32Array(this.numActions));
 
-  // set up observations
-  // TODO: need to change this to load the correct observation by policy
-  this.observations = {
-    policy: [
-      // new BaseAngVelMultistep(this.model, this.simulation, this, "floating_base_joint", 3),
-      new GravityMultistep(this.model, this.simulation, this, "floating_base_joint", 3),
-      new JointPosMultistep(this.model, this.simulation, this, this.jointNamesIsaac, 3),
-      new JointVelMultistep(this.model, this.simulation, this, this.jointNamesIsaac, 3),
-      new PrevActions(this.model, this.simulation, this, 3)
-    ],
-    command_: [
-      new VelocityCommand(this.model, this.simulation, this),
-    ],
-    command: [
-      new ImpedanceCommand(this.model, this.simulation, this),
-    ]
-  };
-
 }
 
 export async function reloadPolicy() {
@@ -95,13 +77,49 @@ export async function reloadPolicy() {
     await new Promise(resolve => setTimeout(resolve, 10)); // Wait 10ms before checking again
   }
 
-  this.policy = new ONNXModule(this.params.policy);
+  // Load policy config from JSON
+  const response = await fetch(this.params.policy);
+  const config = await response.json();
+
+  // Initialize ONNX model
+  this.policy = new ONNXModule(config.onnx);
   await this.policy.init();
   this.adapt_hx.fill(0);
   this.rpy.set(0, 0, 0);
 
   this.simulation.resetData();
   this.simulation.forward();
+
+  // Helper function to create observation instance
+  const createObservation = (obsConfig) => {
+    const ObsClass = Observations[obsConfig.name];
+
+    if (!ObsClass) {
+      throw new Error(`Unknown observation type: ${obsConfig.name}`);
+    }
+
+    // Handle special case for joint names
+    const kwargs = {...obsConfig};
+    delete kwargs.name; // Remove name from kwargs
+
+    if (kwargs.joint_names === "isaac") {
+      kwargs.joint_names = this.jointNamesIsaac;
+    }
+
+    // Pass model, simulation, context and all remaining kwargs
+    return new ObsClass(
+      this.model,
+      this.simulation,
+      this,
+      kwargs
+    );
+  };
+
+  // Set up observations based on config
+  this.observations = {};
+  for (const [key, obsList] of Object.entries(config.obs_config)) {
+    this.observations[key] = obsList.map(obsConfig => createObservation(obsConfig));
+  }
 }
 
 
@@ -135,9 +153,9 @@ export function setupGUI(parentContext) {
   // Add policy selection dropdown - add it right after scene selection
   let reloadPolicy_ = reloadPolicy.bind(parentContext);
   taskFolder.add(parentContext.params, 'policy', {
-    "facet": "./examples/checkpoints/policy-05-03_21-31.onnx",
-    "robust": "./examples/checkpoints/robust.onnx",
-    "vanilla": "./examples/checkpoints/vanilla.onnx"
+    "facet": "./examples/checkpoints/policy-05-03_21-31.json",
+    "robust": "./examples/checkpoints/robust.json",
+    "vanilla": "./examples/checkpoints/vanilla.json"
   }).name('Policy').onChange((value) => {
     parentContext.params["paused"] = true;
     reloadPolicy_();

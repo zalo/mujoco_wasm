@@ -18,7 +18,7 @@ export class MuJoCoDemo {
   constructor() {
     this.mujoco = mujoco;
 
-    this.params = { scene: initialScene, paused: true, help: false, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0, policy: './examples/checkpoints/policy-05-03_21-31.onnx' };
+    this.params = { scene: initialScene, paused: true, help: false, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0, policy: './examples/checkpoints/policy-05-03_21-31.json' };
     this.lastActions = null;
     this.isInferencing = false;
     this.observations = {}
@@ -284,7 +284,6 @@ export class MuJoCoDemo {
       const result = await this.policy.runInference(input);
 
       if (this.lastActions !== null) {
-        // debugger;
         for (let i = 0; i < this.lastActions.length; i++) {
           this.lastActions[i] = this.lastActions[i] * 0.8 + result["action"][i] * 0.2;
         }

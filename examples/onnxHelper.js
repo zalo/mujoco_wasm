@@ -1,19 +1,18 @@
 import * as ort from 'onnxruntime-web';
 
 export class ONNXModule {
-  constructor(modelPath) {
-    this.modelPath = modelPath;
-    this.metaPath = modelPath.replace('.onnx', '.json');
+  constructor(config) {
+    this.modelPath = config.path;
+    this.metaData = config.meta;
   }
 
   async init() {
     // Load the ONNX model
     const modelResponse = await fetch(this.modelPath);
     const modelArrayBuffer = await modelResponse.arrayBuffer();
-    const meta = await (fetch(this.metaPath).then(response => response.json()));
 
-    this.inKeys = meta["in_keys"];
-    this.outKeys = meta["out_keys"];
+    this.inKeys = this.metaData["in_keys"];
+    this.outKeys = this.metaData["out_keys"];
 
     // Create session from the array buffer
     this.session = await ort.InferenceSession.create(modelArrayBuffer, {

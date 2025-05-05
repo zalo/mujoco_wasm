@@ -11,13 +11,15 @@ function getOscillator(time) {
   return [...phase.map(Math.sin), ...phase.map(Math.cos), omega, omega, omega, omega];
 }
 
-export class VelocityCommand {
-  constructor(model, simulation, demo) {
+class VelocityCommand {
+  constructor(model, simulation, demo, kwargs = {}) {
     this.model = model;
     this.simulation = simulation;
     this.demo = demo;
-    this.setvel = new THREE.Vector3(1.0, 0.0, 0.0);
-    this.angvel_kp = 1.0
+    // Unpack kwargs with defaults
+    const { setvel = [1.0, 0.0, 0.0], angvel_kp = 1.0 } = kwargs;
+    this.setvel = new THREE.Vector3(...setvel);
+    this.angvel_kp = angvel_kp;
   }
 
   compute(extra_info) {
@@ -29,16 +31,22 @@ export class VelocityCommand {
 }
 
 
-export class ImpedanceCommand {
-  constructor(model, simulation, demo) {
+class ImpedanceCommand {
+  constructor(model, simulation, demo, kwargs = {}) {
     this.model = model;
     this.simulation = simulation;
     this.demo = demo;
-    // Add impedance control parameters
-    this.impedance_kp = 100.0; // Position gain
-    this.impedance_kd = 20.0;  // Velocity gain
-    this.setvel = new THREE.Vector3(1.0, 0.0, 0.0);
-    this.mass = 1.0;
+    // Unpack kwargs with defaults
+    const {
+      impedance_kp = 100.0,
+      impedance_kd = 20.0,
+      mass = 1.0,
+      setvel = [1.0, 0.0, 0.0]
+    } = kwargs;
+    this.impedance_kp = impedance_kp;
+    this.impedance_kd = impedance_kd;
+    this.mass = mass;
+    this.setvel = new THREE.Vector3(...setvel);
   }
 
   compute(extra_info) {
@@ -50,6 +58,7 @@ export class ImpedanceCommand {
     const base_pos_w = new THREE.Vector3(...this.simulation.qpos.subarray(0, 3));
     const setpoint = this.setvel.clone().multiplyScalar(kd / kp).add(base_pos_w);
 
+    
     // Transform setpoint to body frame
     let setpoint_b = setpoint.sub(base_pos_w).applyQuaternion(this.demo.quat.clone().invert());
 
@@ -68,7 +77,7 @@ export class ImpedanceCommand {
   }
 }
 
-export class BaseAngVelMultistep {
+class BaseAngVelMultistep {
   /**
    * 
    * @param {mujoco.Model} model 
@@ -77,11 +86,17 @@ export class BaseAngVelMultistep {
    * @param {string} base_joint_name
    * @param {number} steps 
    */
-  constructor(model, simulation, demo, base_joint_name, steps = 4) {
+  constructor(model, simulation, demo, kwargs = {}) {
     this.model = model;
     this.simulation = simulation;
-    this.steps = steps;
-    this.angvel_multistep = new Array(steps).fill().map(() => new Float32Array(3));
+    // Unpack kwargs with defaults
+    const { 
+      base_joint_name = "floating_base_joint",
+      history_steps = 4 
+    } = kwargs;
+    
+    this.steps = history_steps;
+    this.angvel_multistep = new Array(this.steps).fill().map(() => new Float32Array(3));
 
     const joint_idx = demo.jointNamesMJC.indexOf(base_joint_name);
     this.joint_qvel_adr = model.jnt_dofadr[joint_idx];
@@ -109,7 +124,7 @@ export class BaseAngVelMultistep {
   }
 }
 
-export class GravityMultistep {
+class GravityMultistep {
   /**
    * 
    * @param {mujoco.Model} model 
@@ -118,16 +133,22 @@ export class GravityMultistep {
    * @param {string} base_joint_name
    * @param {number} steps 
    */
-  constructor(model, simulation, demo, base_joint_name, steps = 4) {
+  constructor(model, simulation, demo, kwargs = {}) {
     this.model = model;
     this.simulation = simulation;
-    this.steps = steps;
-    this.gravity_multistep = new Array(steps).fill().map(() => new Float32Array(3));
+    // Unpack kwargs with defaults
+    const { 
+      joint_name = "floating_base_joint",
+      history_steps = 4,
+      gravity = [0, 0, -1.0]
+    } = kwargs;
+    
+    this.steps = history_steps;
+    this.gravity_multistep = new Array(this.steps).fill().map(() => new Float32Array(3));
 
-    // Fix undefined variables
-    const joint_idx = demo.jointNamesMJC.indexOf(base_joint_name);
+    const joint_idx = demo.jointNamesMJC.indexOf(joint_name);
     this.joint_qpos_adr = model.jnt_qposadr[joint_idx];
-    this.gravity = new THREE.Vector3(0, 0, -1.0);
+    this.gravity = new THREE.Vector3(...gravity);
   }
 
   /**
@@ -157,7 +178,7 @@ export class GravityMultistep {
   }
 }
 
-export class JointPosMultistep {
+class JointPosMultistep {
   /**
    * 
    * @param {mujoco.Model} model 
@@ -166,12 +187,19 @@ export class JointPosMultistep {
    * @param {list[string]} joint_names 
    * @param {number} steps 
    */
-  constructor(model, simulation, demo, joint_names, steps = 4) {
+  constructor(model, simulation, demo, kwargs = {}) {
     this.model = model;
     this.simulation = simulation;
-    this.steps = steps;
+    // Unpack kwargs with defaults
+    const { 
+      joint_names = [],
+      history_steps = 4 
+    } = kwargs;
+    
+    this.steps = history_steps;
     this.joint_names = joint_names;
-    this.joint_pos_multistep = new Array(steps).fill().map(() => new Float32Array(joint_names.length));
+    this.joint_pos_multistep = new Array(this.steps).fill().map(() => new Float32Array(joint_names.length));
+    console.log("joint_names", joint_names);
 
     this.joint_qpos_adr = [];
     for (let i = 0; i < joint_names.length; i++) {
@@ -206,7 +234,7 @@ export class JointPosMultistep {
   }
 }
 
-export class JointVelMultistep {
+class JointVelMultistep {
   /**
    * 
    * @param {mujoco.Model} model 
@@ -215,13 +243,19 @@ export class JointVelMultistep {
    * @param {list[string]} joint_names 
    * @param {number} steps 
    */
-  constructor(model, simulation, demo, joint_names, steps = 4) {
+  constructor(model, simulation, demo, kwargs = {}) {
     this.model = model;
     this.simulation = simulation;
-    this.steps = steps;
+    // Unpack kwargs with defaults
+    const { 
+      joint_names = [],
+      history_steps = 4 
+    } = kwargs;
+    
+    this.steps = history_steps;
     this.joint_names = joint_names;
     this.numJoints = joint_names.length;
-    this.joint_vel_multistep = new Array(steps).fill().map(() => new Float32Array(this.numJoints));
+    this.joint_vel_multistep = new Array(this.steps).fill().map(() => new Float32Array(this.numJoints));
 
     this.joint_qvel_adr = [];
     for (let i = 0; i < joint_names.length; i++) {
@@ -255,7 +289,7 @@ export class JointVelMultistep {
   }
 }
 
-export class PrevActions {
+class PrevActions {
   /**
    * 
    * @param {mujoco.Model} model 
@@ -263,10 +297,13 @@ export class PrevActions {
    * @param {MuJoCoDemo} demo
    * @param {number} steps 
    */
-  constructor(model, simulation, demo, steps = 4) {
+  constructor(model, simulation, demo, kwargs = {}) {
     this.model = model;
     this.simulation = simulation;
-    this.steps = steps;
+    // Unpack kwargs with defaults
+    const { history_steps = 4 } = kwargs;
+    
+    this.steps = history_steps;
     this.numActions = demo.numActions;
     this.actionBuffer = demo.actionBuffer;
   }
@@ -286,3 +323,15 @@ export class PrevActions {
     return flattened;
   }
 }
+
+// Export a dictionary of all observation classes
+export const Observations = {
+  VelocityCommand,
+  ImpedanceCommand,
+  BaseAngVelMultistep,
+  GravityMultistep,
+  JointPosMultistep,
+  JointVelMultistep,
+  PrevActions
+};
+
