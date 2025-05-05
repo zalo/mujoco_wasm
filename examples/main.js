@@ -128,13 +128,14 @@ export class MuJoCoDemo {
         for (let substep = 0; substep < this.decimation; substep++) {
           // Apply control torque
           if (this.lastActions) {
-            const jpos = this.qposAdr.map(adr => this.simulation.qpos[adr]);
-            const jvel = this.qvelAdr.map(adr => this.simulation.qvel[adr]);
-            for (let i = 0; i < this.simulation.ctrl.length; i++) {
-              const j = this.isaac2mjc[i];
-              const targetJpos = 0.5 * this.lastActions[j] + this.defaultJpos[j];
-              const torque = this.jntKp[i] * (targetJpos - jpos[i]) + this.jntKd[i] * (0 - jvel[i]);
-              this.simulation.ctrl[i] = torque;
+            for (let i = 0; i < this.numActions; i++) {
+              const qpos_adr = this.qpos_adr_isaac[i];
+              const qvel_adr = this.qvel_adr_isaac[i];
+              const ctrl_adr = this.ctrl_adr_isaac[i];
+            
+              const targetJpos = 0.5 * this.lastActions[i] + this.defaultJpos[i];
+              const torque = this.jntKp[i] * (targetJpos - this.simulation.qpos[qpos_adr]) + this.jntKd[i] * (0 - this.simulation.qvel[qvel_adr]);
+              this.simulation.ctrl[ctrl_adr] = torque;
             }
           }
 
