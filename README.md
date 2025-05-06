@@ -16,7 +16,7 @@
 
 ## The Power of MuJoCo in your Browser.
 
-Load and Run MuJoCo 2.3.1 Models using JavaScript and WebAssembly.
+Load and Run MuJoCo 3.3.2 Models using JavaScript and WebAssembly.
 
 This repo is a fork of @stillonearth 's starter repository, adding tons of functionality and a comprehensive example scene.
 
@@ -42,7 +42,7 @@ On Windows, run `build_windows.bat`.
 
 *3. (Optional) Update MuJoCo libs*
 
-Build MuJoCo libs with wasm target and place to lib. Currently v2.3.1 included.
+Build MuJoCo libs with wasm target and place to lib. Currently v3.3.2 included.
 
 ## JavaScript API
 
