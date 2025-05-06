@@ -11,5 +11,7 @@ if __name__ == "__main__":
       if path.is_file() and path.suffix in _ALLOWED_EXTENSIONS:
          files_to_download.append(str(path.relative_to(_HERE)))
     files_to_download.sort()
-    with open("index.json", mode="w") as f:
+
+    index_path = _HERE / "files.json"
+    with open(index_path, mode="w") as f:
         json.dump(files_to_download, f, indent=2)

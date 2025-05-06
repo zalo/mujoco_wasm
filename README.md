@@ -1,6 +1,8 @@
 # Quick Start
 
 ```bash
+python examples/scenes/generate_index.py
+
 npm install
 npm run dev
 ```

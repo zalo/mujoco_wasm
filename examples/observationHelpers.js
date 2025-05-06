@@ -38,13 +38,12 @@ class ImpedanceCommand {
     this.demo = demo;
     // Unpack kwargs with defaults
     const {
-      impedance_kp = 100.0,
-      impedance_kd = 20.0,
+      impedance_kp = 24.0,
       mass = 1.0,
       setvel = [1.0, 0.0, 0.0]
     } = kwargs;
     this.impedance_kp = impedance_kp;
-    this.impedance_kd = impedance_kd;
+    this.impedance_kd = 1.8 * Math.sqrt(impedance_kp);
     this.mass = mass;
     this.setvel = new THREE.Vector3(...setvel);
   }
