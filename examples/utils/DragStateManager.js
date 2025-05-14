@@ -51,7 +51,7 @@ export class DragStateManager {
         let intersects = this.raycaster.intersectObjects(this.scene.children);
         for (let i = 0; i < intersects.length; i++) {
             let obj = intersects[i].object;
-            if (obj.bodyID && obj.bodyID > 0) {
+            if (obj.bodyID) {
                 this.physicsObject = obj;
                 this.grabDistance = intersects[0].distance;
                 let hit = this.raycaster.ray.origin.clone();
@@ -87,8 +87,9 @@ export class DragStateManager {
             this.worldHit.copy(this.localHit);
             this.physicsObject.localToWorld(this.worldHit);
             this.arrow.position.copy(this.worldHit);
-            this.arrow.setDirection(this.currentWorld.clone().sub(this.worldHit).normalize());
-            this.arrow.setLength(this.currentWorld.clone().sub(this.worldHit).length());
+            this.offset = this.currentWorld.clone().sub(this.worldHit);
+            this.arrow.setDirection(this.offset.clone().normalize());
+            this.arrow.setLength(this.offset.clone().length());
         }
     }
     end(evt) {

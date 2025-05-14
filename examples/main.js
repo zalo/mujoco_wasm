@@ -44,6 +44,18 @@ export class MuJoCoDemo {
     this.ambientLight.name = 'AmbientLight';
     this.scene.add(this.ambientLight);
 
+    const ballGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+    const ballMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x3b82f6,
+        metalness: 0.2,
+        roughness: 0.5
+    });
+    this.ball = new THREE.Mesh(ballGeometry, ballMaterial);
+    this.ball.position.set(0, 0.5, 0);
+    this.ball.castShadow = true;
+    this.ball.bodyID = "setpoint";
+    this.scene.add(this.ball);
+
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -155,10 +167,17 @@ export class MuJoCoDemo {
             let bodyID = dragged.bodyID;
             this.dragStateManager.update(); // Update the world-space force origin
             // TODO: add damping force, need to add body velocity sensor
-            let force = toMujocoPos(this.dragStateManager.currentWorld.clone().sub(this.dragStateManager.worldHit).multiplyScalar(25));
-            console.log("force", force);
-            let point = toMujocoPos(this.dragStateManager.worldHit.clone());
-            this.simulation.applyForce(force.x, force.y, force.z, 0, 0, 0, point.x, point.y, point.z, bodyID);
+            if (this.dragStateManager.physicsObject) {
+              if (this.dragStateManager.physicsObject.bodyID == "setpoint") {
+                this.ball.position.x = this.dragStateManager.currentWorld.x;
+                this.ball.position.z = this.dragStateManager.currentWorld.z;
+              } else{
+                let force = toMujocoPos(this.dragStateManager.offset.clone().multiplyScalar(25));
+                // console.log("force", force);
+                let point = toMujocoPos(this.dragStateManager.worldHit.clone());
+                this.simulation.applyForce(force.x, force.y, force.z, 0, 0, 0, point.x, point.y, point.z, bodyID);
+              }
+            }
           }
 
           // Step simulation
@@ -234,11 +253,11 @@ export class MuJoCoDemo {
 
         time_end = performance.now();
         const update_render_time = time_end - time_start;
-        if ((this.simStepCount) % (50 * this.decimation) == 0) {
-          console.log("policy inference time:", policy_inference_time / 1000);
-          console.log("sim_step_time:", sim_step_time / 1000);
-          console.log("update_render_time:", update_render_time / 1000)
-        }
+        // if ((this.simStepCount) % (50 * this.decimation) == 0) {
+        //   console.log("policy inference time:", policy_inference_time / 1000);
+        //   console.log("sim_step_time:", sim_step_time / 1000);
+        //   console.log("update_render_time:", update_render_time / 1000)
+        // }
       }
 
       // Calculate time to sleep
@@ -247,13 +266,13 @@ export class MuJoCoDemo {
       const sleepTime = Math.max(0, this.timestep * this.decimation - elapsed);
 
       // calculate actual frequency
-      if ((this.simStepCount) % (50 * this.decimation) == 0) {
-        const actualFreq = 1 / (elapsed + sleepTime);
-        console.log("elapsed", elapsed);
-        console.log("timestep", this.timestep);
-        console.log("sleepTime", sleepTime);
-        console.log("main loop frequency:", actualFreq);
-      }
+      // if ((this.simStepCount) % (50 * this.decimation) == 0) {
+      //   const actualFreq = 1 / (elapsed + sleepTime);
+      //   console.log("elapsed", elapsed);
+      //   console.log("timestep", this.timestep);
+      //   console.log("sleepTime", sleepTime);
+      //   console.log("main loop frequency:", actualFreq);
+      // }
 
       await new Promise(resolve => setTimeout(resolve, sleepTime * 1000));
     }

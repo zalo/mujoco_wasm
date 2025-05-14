@@ -55,9 +55,14 @@ class ImpedanceCommand {
 
     // Get base position in world frame
     const base_pos_w = new THREE.Vector3(...this.simulation.qpos.subarray(0, 3));
-    const setpoint = this.setvel.clone().multiplyScalar(kd / kp).add(base_pos_w);
+    const setpoint = new THREE.Vector3();
+    if (this.demo.ball) {
+      setpoint.x = this.demo.ball.position.x;
+      setpoint.y = -this.demo.ball.position.z;
+    } else {
+      setpoint.copy(this.setvel.clone().multiplyScalar(kd / kp).add(base_pos_w));
+    }
 
-    
     // Transform setpoint to body frame
     let setpoint_b = setpoint.sub(base_pos_w).applyQuaternion(this.demo.quat.clone().invert());
 
