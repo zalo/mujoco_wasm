@@ -128,6 +128,29 @@ class BaseAngVelMultistep {
   }
 }
 
+class BaseLinVel {
+  constructor(model, simulation, demo, kwargs = {}) {
+    this.model = model;
+    this.simulation = simulation;
+    this.demo = demo;
+    
+    const {
+      joint_name = "floating_base_joint"
+    } = kwargs;
+
+    const joint_idx = demo.jointNamesMJC.indexOf(joint_name);
+    this.joint_qvel_adr = model.jnt_dofadr[joint_idx];
+  }
+
+  compute(extra_info) {
+    const lin_vel_w = this.simulation.qvel.subarray(this.joint_qvel_adr, this.joint_qvel_adr + 3);
+    const quat = this.simulation.qpos.subarray(this.joint_qpos_adr + 3, this.joint_qpos_adr + 7);
+    const quat_inv = new THREE.Quaternion(quat[1], quat[2], quat[3], quat[0]).invert();
+    const lin_vel_b = lin_vel_w.clone().applyQuaternion(quat_inv);
+    return lin_vel_b;
+  }
+}
+
 class GravityMultistep {
   /**
    * 
@@ -328,6 +351,30 @@ class PrevActions {
   }
 }
 
+class AppliedTorque {
+  constructor(model, simulation, demo, kwargs = {}) {
+    this.model = model;
+    this.simulation = simulation;
+    this.demo = demo;
+  }
+
+  compute(extra_info) {
+    return this.demo.appliedTorque;
+  }
+}
+
+class AppliedAction {
+  constructor(model, simulation, demo, kwargs = {}) {
+    this.model = model;
+    this.simulation = simulation;
+    this.demo = demo;
+  }
+
+  compute(extra_info) {
+    return this.demo.lastActions;
+  }
+}
+
 // Export a dictionary of all observation classes
 export const Observations = {
   VelocityCommand,
@@ -336,6 +383,9 @@ export const Observations = {
   GravityMultistep,
   JointPosMultistep,
   JointVelMultistep,
-  PrevActions
+  PrevActions,
+  BaseLinVel,
+  AppliedTorque,
+  AppliedAction
 };
 

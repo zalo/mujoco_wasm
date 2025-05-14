@@ -11,6 +11,7 @@ const mujoco = await load_mujoco();
 
 // Set up Emscripten's Virtual File System
 var initialScene = "unitree_go2/scene.xml";
+// var initialScene = "g1_27dof/g1_27dof.xml";
 mujoco.FS.mkdir('/working');
 mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
 
@@ -46,9 +47,9 @@ export class MuJoCoDemo {
 
     const ballGeometry = new THREE.SphereGeometry(0.05, 16, 16);
     const ballMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0x3b82f6,
+        color: 0xef4444,
         metalness: 0.2,
-        roughness: 0.5
+        roughness: 0.2
     });
     this.ball = new THREE.Mesh(ballGeometry, ballMaterial);
     this.ball.position.set(0, 0.5, 0);
@@ -113,8 +114,7 @@ export class MuJoCoDemo {
     let reload_policy = reloadPolicy.bind(this);
     await reload_policy();
 
-    this.jntKp = new Float32Array(this.numActions).fill(25.);
-    this.jntKd = new Float32Array(this.numActions).fill(0.5);
+    this.appliedTorque = new Float32Array(this.numActions).fill(0.0);
 
     this.gui = new GUI();
     setupGUI(this);
@@ -148,6 +148,7 @@ export class MuJoCoDemo {
               const targetJpos = 0.5 * this.lastActions[i] + this.defaultJpos[i];
               const torque = this.jntKp[i] * (targetJpos - this.simulation.qpos[qpos_adr]) + this.jntKd[i] * (0 - this.simulation.qvel[qvel_adr]);
               this.simulation.ctrl[ctrl_adr] = torque;
+              this.appliedTorque[i] = torque;
             }
           }
 
@@ -337,9 +338,9 @@ export class MuJoCoDemo {
       let obs_for_this_key = [];
       for (const obs_func of obs_funcs) {
         const obs = obs_func.compute(simulation);
-        if (obs.some(isNaN)) {
-          console.log("NaN in observation", obs_func.constructor.name);
-        }
+        // if (obs.some(isNaN)) {
+        //   console.log("NaN in observation", obs_func.constructor.name);
+        // }
         obs_for_this_key.push(...obs);
       }
       obs_dict[obs_key] = obs_for_this_key;

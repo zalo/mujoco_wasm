@@ -33,7 +33,9 @@ export async function reloadScene() {
   }
 
   // Load asset_meta.json
-  const asset_meta = await fetch("./examples/checkpoints/asset_meta.json").then(response => response.json());
+  let meta_path = "./examples/scenes/" + sceneToLoad.replace(".xml", ".json");
+  console.log("meta_path", meta_path);
+  const asset_meta = await fetch(meta_path).then(response => response.json());
   this.jointNamesIsaac = asset_meta["joint_names_isaac"];
 
   // find the actuator/qpos/qvel address for each isaac joint
@@ -46,6 +48,10 @@ export async function reloadScene() {
     actuator2joint.push(this.model.actuator_trnid[2 * i]);
   }
   console.log("this.actuator2joint", actuator2joint);
+  this.jntKp = new Float32Array(asset_meta["stiffness"]); // in Isaac order
+  this.jntKd = new Float32Array(asset_meta["damping"]); // in Isaac order
+  console.log("this.jntKp", this.jntKp);
+  console.log("this.jntKd", this.jntKd);
 
   this.ctrl_adr_isaac = []
   this.qpos_adr_isaac = []
