@@ -1,6 +1,7 @@
 {
     "onnx": {
         "meta": {
+            "action_scaling": [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
             "in_keys": [
                 "command",
                 "policy",
@@ -54,7 +55,7 @@
                 ]
             ]
         },
-        "path": "./examples/checkpoints/policy-05-02_23-55.onnx",
+        "path": "./examples/checkpoints/policy-05-02_23-55.onnx"
     },
     "obs_config": {
         "policy": [

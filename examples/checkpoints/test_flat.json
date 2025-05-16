@@ -1,0 +1,70 @@
+{
+    "onnx": {
+        "meta": {
+            "action_scaling": [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+            "in_keys": [
+                "policy"
+            ],
+            "out_keys": [
+                "policy",
+                "_actor_feature",
+                "loc",
+                "scale",
+                "action",
+                "sample_log_prob"
+            ],
+            "in_shapes": [
+                [
+                    [
+                        1,
+                        127
+                    ]
+                ]
+            ]
+        },
+        "path": "./examples/checkpoints/test_flat.onnx"
+    },
+    "obs_config": {
+        "policy": [
+            {
+                "name": "VelocityCommand",
+                "oscillator": false
+            },
+            {
+                "name": "GravityMultistep",
+                "joint_name": "floating_base_joint",
+                "history_steps": 3
+            },
+            {
+                "name": "JointPosMultistep",
+                "joint_names": "isaac",
+                "history_steps": 3
+            },
+            {
+                "name": "JointVelMultistep",
+                "joint_names": "isaac",
+                "history_steps": 3
+            },
+            {
+                "name": "PrevActions",
+                "history_steps": 1,
+                "permute": true
+            },
+            {
+                "name": "AppliedAction"
+            },
+            {
+                "name": "BaseLinVel",
+                "yaw_only": true
+            },
+            {
+                "name": "BaseAngVelMultistep",
+                "joint_name": "floating_base_joint",
+                "history_steps": 1
+            },
+            {
+                "name": "AppliedTorque"
+            }
+        ]
+    }
+}

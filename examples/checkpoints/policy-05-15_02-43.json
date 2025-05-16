@@ -1,0 +1,70 @@
+{
+    "onnx": {
+        "meta": {
+            "action_scaling": [0.5, 0.5, 0.25, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.25, 0.25, 0.5, 0.5, 0.25, 0.25, 0.5, 0.5, 0.5, 0.5],
+            "in_keys": [
+                "policy"
+            ],
+            "out_keys": [
+                "policy",
+                "_actor_feature",
+                "loc",
+                "scale",
+                "action",
+                "sample_log_prob"
+            ],
+            "in_shapes": [
+                [
+                    [
+                        1,
+                        292
+                    ]
+                ]
+            ]
+        },
+        "path": "./examples/checkpoints/policy-05-15_02-43.onnx"
+    },
+    "obs_config": {
+        "policy": [
+            {
+                "name": "VelocityCommand",
+                "oscillator": false
+            },
+            {
+                "name": "BaseAngVelMultistep",
+                "joint_name": "floating_base_joint",
+                "history_steps": 1
+            },
+            {
+                "name": "GravityMultistep",
+                "joint_name": "floating_base_joint",
+                "history_steps": 3
+            },
+            {
+                "name": "JointPosMultistep",
+                "joint_names": "isaac",
+                "history_steps": 3
+            },
+            {
+                "name": "JointVelMultistep",
+                "joint_names": "isaac",
+                "history_steps": 3
+            },
+            {
+                "name": "PrevActions",
+                "history_steps": 3,
+                "permute": true
+            },
+            {
+                "name": "AppliedAction"
+            },
+            {
+                "name": "BaseLinVel",
+                "joint_name": "floating_base_joint"
+            },
+            {
+                "name": "AppliedTorque"
+            }
+        ]
+    }
+}

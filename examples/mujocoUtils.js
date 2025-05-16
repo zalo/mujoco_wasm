@@ -56,22 +56,31 @@ export async function reloadScene() {
   this.ctrl_adr_isaac = []
   this.qpos_adr_isaac = []
   this.qvel_adr_isaac = []
-  for (const joint_name_isaac of this.jointNamesIsaac) {
+  this.mjc2isaac = []
+  this.isaac2mjc = []
+  for (let i = 0; i < this.jointNamesIsaac.length; i++) {
+    const joint_name_isaac = this.jointNamesIsaac[i];
     const joint_idx = this.jointNamesMJC.indexOf(joint_name_isaac);
+    this.mjc2isaac.push(joint_idx - 1); // skip floating_base_joint
     // find the actuator idx that corresponds to the mujoco joint id
     const actuator_idx = actuator2joint.findIndex(joint_id => joint_id == joint_idx);
     this.ctrl_adr_isaac.push(actuator_idx);
     this.qpos_adr_isaac.push(this.model.jnt_qposadr[joint_idx]);
     this.qvel_adr_isaac.push(this.model.jnt_dofadr[joint_idx]);
   }
+  for (let i = 1; i < this.jointNamesMJC.length; i++) {
+    const joint_name_mjc = this.jointNamesMJC[i];
+    const joint_idx = this.jointNamesIsaac.indexOf(joint_name_mjc);
+    this.isaac2mjc.push(joint_idx);
+  }
+  console.log("this.isaac2mjc", this.isaac2mjc);
+  console.log("this.mjc2isaac", this.mjc2isaac);
+
   console.log("this.ctrl_adr_isaac", this.ctrl_adr_isaac);
   console.log("this.qpos_adr_isaac", this.qpos_adr_isaac);
   console.log("this.qvel_adr_isaac", this.qvel_adr_isaac);
 
   this.defaultJpos = new Float32Array(asset_meta["default_joint_pos"]);
-  this.numActions = this.jointNamesIsaac.length;
-  this.actionBuffer = new Array(4).fill().map(() => new Float32Array(this.numActions));
-
 }
 
 export async function reloadPolicy() {
@@ -90,6 +99,9 @@ export async function reloadPolicy() {
   // Initialize ONNX model
   this.policy = new ONNXModule(config.onnx);
   await this.policy.init();
+  this.actionScaling = new Float32Array(config.onnx.meta["action_scaling"]);
+  this.numActions = this.actionScaling.length;
+  this.actionBuffer = new Array(4).fill().map(() => new Float32Array(this.numActions));
   this.adapt_hx.fill(0);
   this.rpy.set(0, 0, 0);
 

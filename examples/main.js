@@ -10,8 +10,8 @@ import load_mujoco from '../dist/mujoco_wasm.js';
 const mujoco = await load_mujoco();
 
 // Set up Emscripten's Virtual File System
-var initialScene = "unitree_go2/scene.xml";
-// var initialScene = "g1_27dof/g1_27dof.xml";
+// var initialScene = "unitree_go2/go2.xml";
+var initialScene = "g1_27dof/g1_27dof.xml";
 mujoco.FS.mkdir('/working');
 mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
 
@@ -19,7 +19,17 @@ export class MuJoCoDemo {
   constructor() {
     this.mujoco = mujoco;
 
-    this.params = { scene: initialScene, paused: true, help: false, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0, policy: './examples/checkpoints/policy-05-03_21-31.json' };
+    this.params = { 
+      scene: initialScene, 
+      paused: true, 
+      help: false, 
+      ctrlnoiserate: 0.0, 
+      ctrlnoisestd: 0.0, 
+      keyframeNumber: 0, 
+      // policy: './examples/checkpoints/policy-05-02_23-55.json' 
+      policy: './examples/checkpoints/policy-05-15_02-43.json'
+      // policy: './examples/checkpoints/test_flat.json'
+    };
     this.lastActions = null;
     this.isInferencing = false;
     this.observations = {}
@@ -114,7 +124,9 @@ export class MuJoCoDemo {
     let reload_policy = reloadPolicy.bind(this);
     await reload_policy();
 
-    this.appliedTorque = new Float32Array(this.numActions).fill(0.0);
+    this.lastActions = new Float32Array(this.numActions).fill(0.0);
+    this.appliedTorque = new Float32Array(this.model.nu).fill(0.0);
+    this.targetJposIsaac = new Float32Array(this.model.nu).fill(0.0);
 
     this.gui = new GUI();
     setupGUI(this);
@@ -141,15 +153,28 @@ export class MuJoCoDemo {
           // Apply control torque
           if (this.lastActions) {
             for (let i = 0; i < this.numActions; i++) {
-              const qpos_adr = this.qpos_adr_isaac[i];
-              const qvel_adr = this.qvel_adr_isaac[i];
-              const ctrl_adr = this.ctrl_adr_isaac[i];
+              // const qpos_adr = this.qpos_adr_isaac[i];
+              // const qvel_adr = this.qvel_adr_isaac[i];
+              // const ctrl_adr = this.ctrl_adr_isaac[i];
             
-              const targetJpos = 0.5 * this.lastActions[i] + this.defaultJpos[i];
-              const torque = this.jntKp[i] * (targetJpos - this.simulation.qpos[qpos_adr]) + this.jntKd[i] * (0 - this.simulation.qvel[qvel_adr]);
-              this.simulation.ctrl[ctrl_adr] = torque;
-              this.appliedTorque[i] = torque;
+              const targetJpos = this.actionScaling[i] * this.lastActions[i] + this.defaultJpos[i];
+              this.targetJposIsaac[i] = targetJpos;
+              // const torque = this.jntKp[i] * (targetJpos - this.simulation.qpos[qpos_adr]) + this.jntKd[i] * (0 - this.simulation.qvel[qvel_adr]);
+              // this.simulation.ctrl[ctrl_adr] = torque;
             }
+            for (let i = 0; i < this.model.nu; i++) {
+              const id = this.isaac2mjc[i];
+              const qpos_adr = this.qpos_adr_isaac[id];
+              const qvel_adr = this.qvel_adr_isaac[id];
+              const torque = this.jntKp[id] * (this.targetJposIsaac[id] - this.simulation.qpos[qpos_adr]) + this.jntKd[id] * (0 - this.simulation.qvel[qvel_adr]);
+              this.simulation.ctrl[i] = torque;
+            }
+            // console.log("this.targetJpos", this.targetJpos);
+            // console.log("this.simulation.ctrl", this.simulation.ctrl);
+            // debugger;
+          }
+          for (let i = 0; i < this.model.nu; i++) {
+            this.appliedTorque[i] = this.simulation.ctrl[this.mjc2isaac[i]];
           }
 
           // Handle perturbations
@@ -292,8 +317,8 @@ export class MuJoCoDemo {
     try {
       // Create input object with initial tensors
       const input = {
-        "is_init": new ort.Tensor('bool', [false], [1]),
-        "adapt_hx": new ort.Tensor('float32', this.adapt_hx, [1, 128])
+        // "is_init": new ort.Tensor('bool', [false], [1]),
+        // "adapt_hx": new ort.Tensor('float32', this.adapt_hx, [1, 128])
       };
 
       // Convert observation arrays to tensors and add to input
@@ -305,7 +330,7 @@ export class MuJoCoDemo {
 
       if (this.lastActions !== null) {
         for (let i = 0; i < this.lastActions.length; i++) {
-          this.lastActions[i] = this.lastActions[i] * 0.8 + result["action"][i] * 0.2;
+          this.lastActions[i] = this.lastActions[i] * 0.2 + result["action"][i] * 0.8;
         }
       } else {
         this.lastActions = result["action"];

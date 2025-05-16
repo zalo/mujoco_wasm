@@ -11,21 +11,40 @@ function getOscillator(time) {
   return [...phase.map(Math.sin), ...phase.map(Math.cos), omega, omega, omega, omega];
 }
 
+
+/**
+ * @param {THREE.Quaternion} quat
+ */
+function yawQuat(quat) {
+  const result = new THREE.Quaternion(quat.x, quat.y, quat.z, quat.w);
+  const yaw = Math.atan2(2 * (quat.w * quat.z + quat.x * quat.y), 1 - 2 * (quat.y * quat.y + quat.z * quat.z));
+  result.z = Math.sin(yaw / 2);
+  result.w = Math.cos(yaw / 2);
+  return result.normalize();
+}
+
+
 class VelocityCommand {
   constructor(model, simulation, demo, kwargs = {}) {
     this.model = model;
     this.simulation = simulation;
     this.demo = demo;
     // Unpack kwargs with defaults
-    const { setvel = [1.0, 0.0, 0.0], angvel_kp = 1.0 } = kwargs;
-    this.setvel = new THREE.Vector3(...setvel);
+    const { setvel = [1.0, 0.0, 0.0], angvel_kp = 1.0, oscillator = true } = kwargs;
+    this.setvel_w = new THREE.Vector3(...setvel);
     this.angvel_kp = angvel_kp;
+    this.oscillator = oscillator;
   }
 
   compute(extra_info) {
-    const osc = getOscillator(this.demo.mujoco_time / 1000.);
-    const setvel_b = this.setvel.clone().applyQuaternion(this.demo.quat.clone().invert());
-    return [setvel_b.x, setvel_b.y, this.angvel_kp * (0 - this.demo.rpy.z), 0, ...osc];
+    const setvel_b = this.setvel_w.clone().applyQuaternion(this.demo.quat.clone().invert());
+    if (this.oscillator) {
+      const osc = getOscillator(this.demo.mujoco_time / 1000.);
+      return [setvel_b.x, setvel_b.y, this.angvel_kp * (0 - this.demo.rpy.z), 0.75, ...osc];
+    } else {
+      // return [setvel_b.x, setvel_b.y, this.angvel_kp * (0 - this.demo.rpy.z), 0];
+      return [1.0, 0.0, 2.0, 0.75];
+    }
   }
 
 }
@@ -101,10 +120,8 @@ class BaseAngVelMultistep {
     
     this.steps = history_steps;
     this.angvel_multistep = new Array(this.steps).fill().map(() => new Float32Array(3));
-
     const joint_idx = demo.jointNamesMJC.indexOf(base_joint_name);
-    this.joint_qvel_adr = model.jnt_dofadr[joint_idx];
-    console.log("joint_qvel_adr", this.joint_qvel_adr);
+    this.joint_qpos_adr = model.jnt_qposadr[joint_idx];
   }
 
   /**
@@ -113,12 +130,17 @@ class BaseAngVelMultistep {
    * @returns {Float32Array}
    */
   compute(extra_info) {
+    const quat_wxyz = this.simulation.qpos.subarray(this.joint_qpos_adr + 3, this.joint_qpos_adr + 7);
+    const quat = new THREE.Quaternion(quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]);
+    const ang_vel_w = new THREE.Vector3(...this.simulation.cvel.subarray(6, 9));
+    const ang_vel_b = ang_vel_w.clone().applyQuaternion(quat.invert());
+    // console.log("cvel", this.simulation.cvel.subarray(6, 9));
+
     // Update history - shift all elements forward
     for (let i = this.angvel_multistep.length - 1; i > 0; i--) {
       this.angvel_multistep[i] = this.angvel_multistep[i - 1];
     }
-    const angvel = this.simulation.qvel.subarray(this.joint_qvel_adr, this.joint_qvel_adr + 3);
-    this.angvel_multistep[0] = angvel;
+    this.angvel_multistep[0] = [ang_vel_b.x, ang_vel_b.y, ang_vel_b.z];
     // Flatten all steps into single array
     const flattened = new Float32Array(this.steps * 3);
     for (let i = 0; i < this.steps; i++) {
@@ -135,19 +157,25 @@ class BaseLinVel {
     this.demo = demo;
     
     const {
-      joint_name = "floating_base_joint"
+      joint_name = "floating_base_joint",
+      yaw_only = false
     } = kwargs;
 
     const joint_idx = demo.jointNamesMJC.indexOf(joint_name);
-    this.joint_qvel_adr = model.jnt_dofadr[joint_idx];
+    this.joint_qpos_adr = model.jnt_qposadr[joint_idx];
+    this.yaw_only = yaw_only;
   }
 
   compute(extra_info) {
-    const lin_vel_w = this.simulation.qvel.subarray(this.joint_qvel_adr, this.joint_qvel_adr + 3);
-    const quat = this.simulation.qpos.subarray(this.joint_qpos_adr + 3, this.joint_qpos_adr + 7);
-    const quat_inv = new THREE.Quaternion(quat[1], quat[2], quat[3], quat[0]).invert();
-    const lin_vel_b = lin_vel_w.clone().applyQuaternion(quat_inv);
-    return lin_vel_b;
+    const lin_vel_w = new THREE.Vector3(...this.simulation.cvel.subarray(9, 12));
+    const quat_wxyz = this.simulation.qpos.subarray(this.joint_qpos_adr + 3, this.joint_qpos_adr + 7);
+    // convert to THREE.Quaternion xyzw
+    let quat = new THREE.Quaternion(quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]);
+    if (this.yaw_only) {
+      quat = yawQuat(quat);
+    }
+    const lin_vel_b = lin_vel_w.clone().applyQuaternion(quat.invert());
+    return [lin_vel_b.x, lin_vel_b.y, lin_vel_b.z];
   }
 }
 
@@ -328,9 +356,10 @@ class PrevActions {
     this.model = model;
     this.simulation = simulation;
     // Unpack kwargs with defaults
-    const { history_steps = 4 } = kwargs;
+    const { history_steps = 4, permute = false } = kwargs;
     
     this.steps = history_steps;
+    this.permute = permute;
     this.numActions = demo.numActions;
     this.actionBuffer = demo.actionBuffer;
   }
@@ -342,9 +371,17 @@ class PrevActions {
    */
   compute(extra_info) {
     const flattened = new Float32Array(this.steps * this.numActions);
-    for (let j = 0; j < this.numActions; j++) {
+    if (this.permute) {
       for (let i = 0; i < this.steps; i++) {
-        flattened[j * this.steps + i] = this.actionBuffer[i][j];
+        for (let j = 0; j < this.numActions; j++) {
+          flattened[i * this.numActions + j] = this.actionBuffer[i][j];
+        }
+      }
+    } else {
+      for (let j = 0; j < this.numActions; j++) {
+        for (let i = 0; i < this.steps; i++) {
+          flattened[j * this.steps + i] = this.actionBuffer[i][j];
+        }
       }
     }
     return flattened;
