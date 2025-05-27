@@ -1604,7 +1604,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .field("timeconst"  , &mjLROpt::timeconst)  // time constant for velocity reduction; min 0.01
       .field("timestep"   , &mjLROpt::timestep)   // simulation timestep; 0: use mjOption.timestep
       .field("inttotal"   , &mjLROpt::inttotal)   // total simulation time interval
-      .field("inteval"    , &mjLROpt::inteval)    // evaluation time interval (at the end)
+      .field("interval"   , &mjLROpt::interval)   // evaluation time interval (at the end)
       .field("tolrange"   , &mjLROpt::tolrange);  // convergence tolerance (relative to range)
 
   value_object<mjOption>("mjOption")
@@ -1613,7 +1613,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .field("impratio"            , &mjOption::impratio)          // ratio of friction-to-normal contact impedance
       .field("tolerance"           , &mjOption::tolerance)         // main solver tolerance
       .field("noslip_tolerance"    , &mjOption::noslip_tolerance)  // noslip solver tolerance
-      .field("mpr_tolerance"       , &mjOption::mpr_tolerance)     // MPR solver tolerance
+      //.field("mpr_tolerance"     , &mjOption::mpr_tolerance)   // MPR solver tolerance
       //.field("gravity"           , &mjOption::gravity)           // gravitational acceleration
       //.field("wind"              , &mjOption::wind)              // wind (for lift, drag and viscosity)
       //.field("magnetic"          , &mjOption::magnetic)          // global magnetic flux
@@ -1623,13 +1623,13 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       //.field("o_solref"          , &mjOption::o_solref)          // solref
       //.field("o_solimp"          , &mjOption::o_solimp)          // solimp
       .field("integrator"          , &mjOption::integrator)        // integration mode (mjtIntegrator)
-      .field("collision"           , &mjOption::collision)         // collision mode (mjtCollision)
+      //.field("collision"         , &mjOption::collision)         // collision mode (mjtCollision)
       .field("cone"                , &mjOption::cone)              // type of friction cone (mjtCone)
       .field("jacobian"            , &mjOption::jacobian)          // type of Jacobian (mjtJacobian)
       .field("solver"              , &mjOption::solver)            // solver algorithm (mjtSolver)
       .field("iterations"          , &mjOption::iterations)        // maximum number of main solver iterations
       .field("noslip_iterations"   , &mjOption::noslip_iterations) // maximum number of noslip solver iterations
-      .field("mpr_iterations"      , &mjOption::mpr_iterations)    // maximum number of MPR solver iterations
+      //.field("mpr_iterations"    , &mjOption::mpr_iterations)    // maximum number of MPR solver iterations
       .field("disableflags"        , &mjOption::disableflags)      // bit flags for disabling standard features
       .field("enableflags"         , &mjOption::enableflags);      // bit flags for enabling optional features
 

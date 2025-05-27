@@ -31,7 +31,7 @@ public:
   mjtNum timeconst             () { return m->timeconst             ; } // maximum force; 0: no limit
   mjtNum timestep              () { return m->timestep              ; } // time constant for velocity reduction; min 0.01
   mjtNum inttotal              () { return m->inttotal              ; } // simulation timestep; 0: use mjOption.timestep
-  mjtNum inteval               () { return m->inteval               ; } // total simulation time interval
+  mjtNum interval              () { return m->interval              ; } // total simulation time interval
   mjtNum tolrange              () { return m->tolrange              ; } // evaluation time interval (at the end)
 private:
   mjLROpt *m;
@@ -60,18 +60,18 @@ public:
   mjtNum impratio              () { return m->impratio              ; } // solver parameters
   mjtNum tolerance             () { return m->tolerance             ; } // ratio of friction-to-normal contact impedance
   mjtNum noslip_tolerance      () { return m->noslip_tolerance      ; } // main solver tolerance
-  mjtNum mpr_tolerance         () { return m->mpr_tolerance         ; } // noslip solver tolerance
+  //mjtNum mpr_tolerance       () { return m->mpr_tolerance         ; } // noslip solver tolerance
   mjtNum density               () { return m->density               ; } // global magnetic flux
   mjtNum viscosity             () { return m->viscosity             ; } // density of medium
   mjtNum o_margin              () { return m->o_margin              ; } // override contact solver parameters (if enabled)
   int integrator            () { return m->integrator            ; } // discrete settings
-  int collision             () { return m->collision             ; } // integration mode (mjtIntegrator)
+  //int collision           () { return m->collision             ; } // integration mode (mjtIntegrator)
   int cone                  () { return m->cone                  ; } // collision mode (mjtCollision)
   int jacobian              () { return m->jacobian              ; } // type of friction cone (mjtCone)
   int solver                () { return m->solver                ; } // type of Jacobian (mjtJacobian)
   int iterations            () { return m->iterations            ; } // solver algorithm (mjtSolver)
   int noslip_iterations     () { return m->noslip_iterations     ; } // maximum number of main solver iterations
-  int mpr_iterations        () { return m->mpr_iterations        ; } // maximum number of noslip solver iterations
+  //int mpr_iterations      () { return m->mpr_iterations        ; } // maximum number of noslip solver iterations
   int disableflags          () { return m->disableflags          ; } // maximum number of MPR solver iterations
   int enableflags           () { return m->enableflags           ; } // bit flags for disabling standard features
 private:
@@ -475,7 +475,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("timeconst"           , &LROpt::timeconst             )
       .function("timestep"            , &LROpt::timestep              )
       .function("inttotal"            , &LROpt::inttotal              )
-      .function("inteval"             , &LROpt::inteval               )
+      .function("interval"            , &LROpt::interval              )
       .function("tolrange"            , &LROpt::tolrange              )
 ;
 
@@ -494,7 +494,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("impratio"            , &Option::impratio              )
       .function("tolerance"           , &Option::tolerance             )
       .function("noslip_tolerance"    , &Option::noslip_tolerance      )
-      .function("mpr_tolerance"       , &Option::mpr_tolerance         )
+      //.function("mpr_tolerance"       , &Option::mpr_tolerance       )
       .function("gravity"             , &Option::gravity               )
       .function("wind"                , &Option::wind                  )
       .function("magnetic"            , &Option::magnetic              )
@@ -504,13 +504,13 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("o_solref"            , &Option::o_solref              )
       .function("o_solimp"            , &Option::o_solimp              )
       .function("integrator"          , &Option::integrator            )
-      .function("collision"           , &Option::collision             )
+      //.function("collision"           , &Option::collision             )
       .function("cone"                , &Option::cone                  )
       .function("jacobian"            , &Option::jacobian              )
       .function("solver"              , &Option::solver                )
       .function("iterations"          , &Option::iterations            )
       .function("noslip_iterations"   , &Option::noslip_iterations     )
-      .function("mpr_iterations"      , &Option::mpr_iterations        )
+      //.function("mpr_iterations"      , &Option::mpr_iterations        )
       .function("disableflags"        , &Option::disableflags          )
       .function("enableflags"         , &Option::enableflags           )
 ;
