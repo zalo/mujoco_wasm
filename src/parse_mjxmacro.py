@@ -158,11 +158,15 @@ for line in model_lines:
     if cur_enum_name is not None and len(line) > 0:
         parts = line.split("//")
         parts = [part.strip() for part in parts]
-        if len(parts[0]) > 0 and len(parts[0].split(" ")) > 0:
-            meat = parts[0].split(" ")[0].split(",")[0]; potatos = parts[1]
-            auto_gen_lines["model_enums"].append('      .value('+('"'+meat+'"').ljust(25)+', '+cur_enum_name.ljust(25)+'::'+meat.ljust(25)+')')
-            auto_gen_lines["enums_typescript"].append("    /** "+potatos.ljust(40)+" */")
-            auto_gen_lines["enums_typescript"].append("    "+meat.ljust(25)+",")
+        try:
+            if len(parts[0]) > 0 and len(parts[0].split(" ")) > 0:
+                meat = parts[0].split(" ")[0].split(",")[0]
+                auto_gen_lines["model_enums"].append('      .value('+('"'+meat+'"').ljust(25)+', '+cur_enum_name.ljust(25)+'::'+meat.ljust(25)+')')
+                if len(parts) > 1:
+                    auto_gen_lines["enums_typescript"].append("    /** "+parts[1].ljust(40)+" */")
+                    auto_gen_lines["enums_typescript"].append("    "+meat.ljust(25)+",")
+        except Exception as e:
+            print("Error parsing enum line:", line, parts, e)
 
 
     if line.startswith("typedef enum"):
