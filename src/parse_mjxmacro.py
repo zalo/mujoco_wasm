@@ -17,6 +17,8 @@ def parse_pointer_line(line:str, header_lines:list[str], mj_definitions:list[str
         elements = line.strip("    X   (").split(""")""")[0].strip().split(",")
     elif "    XMJV(" in line:
         elements = line.strip("    XMJV(").split(""")""")[0].strip().split(",")
+    elif "    XNV (" in line:
+        elements = line.strip("    XNV (").split(""")""")[0].strip().split(",")
     elements = [e.strip() for e in elements]
 
     model_ptr = "m" if parse_mode[1] == "model" else "_model->ptr()"
@@ -40,6 +42,8 @@ def parse_int_line(line:str, header_lines:list[str], mj_definitions:list[str], e
         name = line.strip("    X   (").split(""")""")[0].strip()
     elif "    XMJV(" in line:
         name = line.strip("    XMJV(").split(""")""")[0].strip()
+    elif "    XNV (" in line:
+        name = line.strip("    XNV (").split(""")""")[0].strip()
     mj_definitions     .append('  int  '+name.ljust(14)+'() const { return m->'+name.ljust(14)+'; }')
     emscripten_bindings.append('      .property('+('"'+name+'"').ljust(24)+', &Model::'+name.ljust(22)+')')
 
@@ -67,17 +71,18 @@ with open("include/mujoco/mjxmacro.h") as f:
     for line in lines:
         if parse_mode[0] != None:
             if parse_mode[0] == "pointers":
-                if line.strip().startswith("X   (") or line.strip().startswith("XMJV("):
+                if line.strip().startswith("X   (") or line.strip().startswith("XMJV(") or line.strip().startswith("XNV ("):
                     parse_pointer_line(line, 
                                        model_lines if parse_mode[1] == "model" else data_lines, 
                                        auto_gen_lines[parse_mode[1]+"_definitions"], 
                                        auto_gen_lines[parse_mode[1]+"_bindings"], 
                                        auto_gen_lines[parse_mode[1]+"_typescript"])
                 else:
+                    print(line)
                     parse_mode = (None, None)
 
             if parse_mode[0] == "ints":
-                if line.strip().startswith("X   (") or line.strip().startswith("XMJV("):
+                if line.strip().startswith("X   (") or line.strip().startswith("XMJV(") or line.strip().startswith("XNV ("):
                     parse_int_line(line, 
                                    model_lines if parse_mode[1] == "model" else data_lines, 
                                    auto_gen_lines[parse_mode[1]+"_definitions"], 
