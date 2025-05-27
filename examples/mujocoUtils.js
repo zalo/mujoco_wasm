@@ -285,6 +285,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
 
     // Decode the null-terminated string names.
     let textDecoder = new TextDecoder("utf-8");
+    let names_array = new Uint8Array(model.names);
     let fullString = textDecoder.decode(model.names);
     let names = fullString.split(textDecoder.decode(new ArrayBuffer(1)));
 
@@ -321,7 +322,15 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       // Create the body if it doesn't exist.
       if (!(b in bodies)) {
         bodies[b] = new THREE.Group();
-        bodies[b].name = names[model.name_bodyadr[b]];
+        
+        let start_idx = model.name_bodyadr[b];
+        let end_idx = start_idx;
+        while (end_idx < names_array.length && names_array[end_idx] !== 0) {
+          end_idx++;
+        }
+        let name_buffer = names_array.subarray(start_idx, end_idx);
+        bodies[b].name = textDecoder.decode(name_buffer);
+        
         bodies[b].bodyID = b;
         bodies[b].has_custom_mesh = false;
       }
