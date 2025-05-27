@@ -1393,6 +1393,394 @@ export interface Model {
   mesh_pos              : Float64Array;
   /** rotation applied to asset vertices       (nmesh x 4)*/
   mesh_quat             : Float64Array;
+  /** vertex positions for all meshes          (nmeshvert x 3)*/
+  mesh_vert             : Float32Array;
+  /** normals for all meshes                   (nmeshnormal x 3)*/
+  mesh_normal           : Float32Array;
+  /** vertex texcoords for all meshes          (nmeshtexcoord x 2)*/
+  mesh_texcoord         : Float32Array;
+  /** vertex face data                         (nmeshface x 3)*/
+  mesh_face             :   Int32Array;
+  /** normal face data                         (nmeshface x 3)*/
+  mesh_facenormal       :   Int32Array;
+  /** texture face data                        (nmeshface x 3)*/
+  mesh_facetexcoord     :   Int32Array;
+  /** convex graph data                        (nmeshgraph x 1)*/
+  mesh_graph            :   Int32Array;
+  /** address of asset path for mesh; -1: none (nmesh x 1)*/
+  mesh_pathadr          :   Int32Array;
+  /** number of polygons per mesh              (nmesh x 1)*/
+  mesh_polynum          :   Int32Array;
+  /** first polygon address per mesh           (nmesh x 1)*/
+  mesh_polyadr          :   Int32Array;
+  /** all polygon normals                      (nmeshpoly x 3)*/
+  mesh_polynormal       : Float64Array;
+  /** polygon vertex start address             (nmeshpoly x 1)*/
+  mesh_polyvertadr      :   Int32Array;
+  /** number of vertices per polygon           (nmeshpoly x 1)*/
+  mesh_polyvertnum      :   Int32Array;
+  /** all polygon vertices                     (nmeshpolyvert x 1)*/
+  mesh_polyvert         :   Int32Array;
+  /** first polygon address per vertex         (nmeshvert x 1)*/
+  mesh_polymapadr       :   Int32Array;
+  /** number of polygons per vertex            (nmeshvert x 1)*/
+  mesh_polymapnum       :   Int32Array;
+  /** vertex to polygon map                    (nmeshpolymap x 1)*/
+  mesh_polymap          :   Int32Array;
+  /** skin material id; -1: none               (nskin x 1)*/
+  skin_matid            :   Int32Array;
+  /** group for visibility                     (nskin x 1)*/
+  skin_group            :   Int32Array;
+  /** skin rgba                                (nskin x 4)*/
+  skin_rgba             : Float32Array;
+  /** inflate skin in normal direction         (nskin x 1)*/
+  skin_inflate          : Float32Array;
+  /** first vertex address                     (nskin x 1)*/
+  skin_vertadr          :   Int32Array;
+  /** number of vertices                       (nskin x 1)*/
+  skin_vertnum          :   Int32Array;
+  /** texcoord data address; -1: no texcoord   (nskin x 1)*/
+  skin_texcoordadr      :   Int32Array;
+  /** first face address                       (nskin x 1)*/
+  skin_faceadr          :   Int32Array;
+  /** number of faces                          (nskin x 1)*/
+  skin_facenum          :   Int32Array;
+  /** first bone in skin                       (nskin x 1)*/
+  skin_boneadr          :   Int32Array;
+  /** number of bones in skin                  (nskin x 1)*/
+  skin_bonenum          :   Int32Array;
+  /** vertex positions for all skin meshes     (nskinvert x 3)*/
+  skin_vert             : Float32Array;
+  /** vertex texcoords for all skin meshes     (nskintexvert x 2)*/
+  skin_texcoord         : Float32Array;
+  /** triangle faces for all skin meshes       (nskinface x 3)*/
+  skin_face             :   Int32Array;
+  /** first vertex in each bone                (nskinbone x 1)*/
+  skin_bonevertadr      :   Int32Array;
+  /** number of vertices in each bone          (nskinbone x 1)*/
+  skin_bonevertnum      :   Int32Array;
+  /** bind pos of each bone                    (nskinbone x 3)*/
+  skin_bonebindpos      : Float32Array;
+  /** bind quat of each bone                   (nskinbone x 4)*/
+  skin_bonebindquat     : Float32Array;
+  /** body id of each bone                     (nskinbone x 1)*/
+  skin_bonebodyid       :   Int32Array;
+  /** mesh ids of vertices in each bone        (nskinbonevert x 1)*/
+  skin_bonevertid       :   Int32Array;
+  /** weights of vertices in each bone         (nskinbonevert x 1)*/
+  skin_bonevertweight   : Float32Array;
+  /** address of asset path for skin; -1: none (nskin x 1)*/
+  skin_pathadr          :   Int32Array;
+  /** (x, y, z_top, z_bottom)                  (nhfield x 4)*/
+  hfield_size           : Float64Array;
+  /** number of rows in grid                   (nhfield x 1)*/
+  hfield_nrow           :   Int32Array;
+  /** number of columns in grid                (nhfield x 1)*/
+  hfield_ncol           :   Int32Array;
+  /** address in hfield_data                   (nhfield x 1)*/
+  hfield_adr            :   Int32Array;
+  /** elevation data                           (nhfielddata x 1)*/
+  hfield_data           : Float32Array;
+  /** address of hfield asset path; -1: none   (nhfield x 1)*/
+  hfield_pathadr        :   Int32Array;
+  /** texture type (mjtTexture)                (ntex x 1)*/
+  tex_type              :   Int32Array;
+  /** number of rows in texture image          (ntex x 1)*/
+  tex_height            :   Int32Array;
+  /** number of columns in texture image       (ntex x 1)*/
+  tex_width             :   Int32Array;
+  /** number of channels in texture image      (ntex x 1)*/
+  tex_nchannel          :   Int32Array;
+  /** start address in tex_data                (ntex x 1)*/
+  tex_adr               :   Int32Array;
+  /** pixel values                             (ntexdata x 1)*/
+  tex_data              :   Uint8Array;
+  /** address of texture asset path; -1: none  (ntex x 1)*/
+  tex_pathadr           :   Int32Array;
+  /** indices of textures; -1: none            (nmat x mjNTEXROLE)*/
+  mat_texid             :   Int32Array;
+  /** make texture cube uniform                (nmat x 1)*/
+  mat_texuniform        :   Uint8Array;
+  /** texture repetition for 2d mapping        (nmat x 2)*/
+  mat_texrepeat         : Float32Array;
+  /** emission (x rgb)                         (nmat x 1)*/
+  mat_emission          : Float32Array;
+  /** specular (x white)                       (nmat x 1)*/
+  mat_specular          : Float32Array;
+  /** shininess coef                           (nmat x 1)*/
+  mat_shininess         : Float32Array;
+  /** reflectance (0: disable)                 (nmat x 1)*/
+  mat_reflectance       : Float32Array;
+  /** metallic coef                            (nmat x 1)*/
+  mat_metallic          : Float32Array;
+  /** roughness coef                           (nmat x 1)*/
+  mat_roughness         : Float32Array;
+  /** rgba                                     (nmat x 4)*/
+  mat_rgba              : Float32Array;
+  /** contact dimensionality                   (npair x 1)*/
+  pair_dim              :   Int32Array;
+  /** id of geom1                              (npair x 1)*/
+  pair_geom1            :   Int32Array;
+  /** id of geom2                              (npair x 1)*/
+  pair_geom2            :   Int32Array;
+  /** body1 << 16 + body2                      (npair x 1)*/
+  pair_signature        :   Int32Array;
+  /** solver reference: contact normal         (npair x mjNREF)*/
+  pair_solref           : Float64Array;
+  /** solver reference: contact friction       (npair x mjNREF)*/
+  pair_solreffriction   : Float64Array;
+  /** solver impedance: contact                (npair x mjNIMP)*/
+  pair_solimp           : Float64Array;
+  /** detect contact if dist<margin            (npair x 1)*/
+  pair_margin           : Float64Array;
+  /** include in solver if dist<margin-gap     (npair x 1)*/
+  pair_gap              : Float64Array;
+  /** tangent1, 2, spin, roll1, 2              (npair x 5)*/
+  pair_friction         : Float64Array;
+  /** body1 << 16 + body2                      (nexclude x 1)*/
+  exclude_signature     :   Int32Array;
+  /** constraint type (mjtEq)                  (neq x 1)*/
+  eq_type               :   Int32Array;
+  /** id of object 1                           (neq x 1)*/
+  eq_obj1id             :   Int32Array;
+  /** id of object 2                           (neq x 1)*/
+  eq_obj2id             :   Int32Array;
+  /** type of both objects (mjtObj)            (neq x 1)*/
+  eq_objtype            :   Int32Array;
+  /** initial enable/disable constraint state  (neq x 1)*/
+  eq_active0            :   Uint8Array;
+  /** constraint solver reference              (neq x mjNREF)*/
+  eq_solref             : Float64Array;
+  /** constraint solver impedance              (neq x mjNIMP)*/
+  eq_solimp             : Float64Array;
+  /** numeric data for constraint              (neq x mjNEQDATA)*/
+  eq_data               : Float64Array;
+  /** address of first object in tendon's path (ntendon x 1)*/
+  tendon_adr            :   Int32Array;
+  /** number of objects in tendon's path       (ntendon x 1)*/
+  tendon_num            :   Int32Array;
+  /** material id for rendering                (ntendon x 1)*/
+  tendon_matid          :   Int32Array;
+  /** group for visibility                     (ntendon x 1)*/
+  tendon_group          :   Int32Array;
+  /** does tendon have length limits           (ntendon x 1)*/
+  tendon_limited        :   Uint8Array;
+  /** does tendon have actuator force limits   (ntendon x 1)*/
+  tendon_actfrclimited  :   Uint8Array;
+  /** width for rendering                      (ntendon x 1)*/
+  tendon_width          : Float64Array;
+  /** constraint solver reference: limit       (ntendon x mjNREF)*/
+  tendon_solref_lim     : Float64Array;
+  /** constraint solver impedance: limit       (ntendon x mjNIMP)*/
+  tendon_solimp_lim     : Float64Array;
+  /** constraint solver reference: friction    (ntendon x mjNREF)*/
+  tendon_solref_fri     : Float64Array;
+  /** constraint solver impedance: friction    (ntendon x mjNIMP)*/
+  tendon_solimp_fri     : Float64Array;
+  /** tendon length limits                     (ntendon x 2)*/
+  tendon_range          : Float64Array;
+  /** range of total actuator force            (ntendon x 2)*/
+  tendon_actfrcrange    : Float64Array;
+  /** min distance for limit detection         (ntendon x 1)*/
+  tendon_margin         : Float64Array;
+  /** stiffness coefficient                    (ntendon x 1)*/
+  tendon_stiffness      : Float64Array;
+  /** damping coefficient                      (ntendon x 1)*/
+  tendon_damping        : Float64Array;
+  /** inertia associated with tendon velocity  (ntendon x 1)*/
+  tendon_armature       : Float64Array;
+  /** loss due to friction                     (ntendon x 1)*/
+  tendon_frictionloss   : Float64Array;
+  /** spring resting length range              (ntendon x 2)*/
+  tendon_lengthspring   : Float64Array;
+  /** tendon length in qpos0                   (ntendon x 1)*/
+  tendon_length0        : Float64Array;
+  /** inv. weight in qpos0                     (ntendon x 1)*/
+  tendon_invweight0     : Float64Array;
+  /** user data                                (ntendon x nuser_tendon)*/
+  tendon_user           : Float64Array;
+  /** rgba when material is omitted            (ntendon x 4)*/
+  tendon_rgba           : Float32Array;
+  /** wrap object type (mjtWrap)               (nwrap x 1)*/
+  wrap_type             :   Int32Array;
+  /** object id: geom, site, joint             (nwrap x 1)*/
+  wrap_objid            :   Int32Array;
+  /** divisor, joint coef, or site id          (nwrap x 1)*/
+  wrap_prm              : Float64Array;
+  /** transmission type (mjtTrn)               (nu x 1)*/
+  actuator_trntype      :   Int32Array;
+  /** dynamics type (mjtDyn)                   (nu x 1)*/
+  actuator_dyntype      :   Int32Array;
+  /** gain type (mjtGain)                      (nu x 1)*/
+  actuator_gaintype     :   Int32Array;
+  /** bias type (mjtBias)                      (nu x 1)*/
+  actuator_biastype     :   Int32Array;
+  /** transmission id: joint, tendon, site     (nu x 2)*/
+  actuator_trnid        :   Int32Array;
+  /** first activation address; -1: stateless  (nu x 1)*/
+  actuator_actadr       :   Int32Array;
+  /** number of activation variables           (nu x 1)*/
+  actuator_actnum       :   Int32Array;
+  /** group for visibility                     (nu x 1)*/
+  actuator_group        :   Int32Array;
+  /** is control limited                       (nu x 1)*/
+  actuator_ctrllimited  :   Uint8Array;
+  /** is force limited                         (nu x 1)*/
+  actuator_forcelimited :   Uint8Array;
+  /** is activation limited                    (nu x 1)*/
+  actuator_actlimited   :   Uint8Array;
+  /** dynamics parameters                      (nu x mjNDYN)*/
+  actuator_dynprm       : Float64Array;
+  /** gain parameters                          (nu x mjNGAIN)*/
+  actuator_gainprm      : Float64Array;
+  /** bias parameters                          (nu x mjNBIAS)*/
+  actuator_biasprm      : Float64Array;
+  /** step activation before force             (nu x 1)*/
+  actuator_actearly     :   Uint8Array;
+  /** range of controls                        (nu x 2)*/
+  actuator_ctrlrange    : Float64Array;
+  /** range of forces                          (nu x 2)*/
+  actuator_forcerange   : Float64Array;
+  /** range of activations                     (nu x 2)*/
+  actuator_actrange     : Float64Array;
+  /** scale length and transmitted force       (nu x 6)*/
+  actuator_gear         : Float64Array;
+  /** crank length for slider-crank            (nu x 1)*/
+  actuator_cranklength  : Float64Array;
+  /** acceleration from unit force in qpos0    (nu x 1)*/
+  actuator_acc0         : Float64Array;
+  /** actuator length in qpos0                 (nu x 1)*/
+  actuator_length0      : Float64Array;
+  /** feasible actuator length range           (nu x 2)*/
+  actuator_lengthrange  : Float64Array;
+  /** user data                                (nu x nuser_actuator)*/
+  actuator_user         : Float64Array;
+  /** plugin instance id; -1: not a plugin     (nu x 1)*/
+  actuator_plugin       :   Int32Array;
+  /** sensor type (mjtSensor)                  (nsensor x 1)*/
+  sensor_type           :   Int32Array;
+  /** numeric data type (mjtDataType)          (nsensor x 1)*/
+  sensor_datatype       :   Int32Array;
+  /** required compute stage (mjtStage)        (nsensor x 1)*/
+  sensor_needstage      :   Int32Array;
+  /** type of sensorized object (mjtObj)       (nsensor x 1)*/
+  sensor_objtype        :   Int32Array;
+  /** id of sensorized object                  (nsensor x 1)*/
+  sensor_objid          :   Int32Array;
+  /** type of reference frame (mjtObj)         (nsensor x 1)*/
+  sensor_reftype        :   Int32Array;
+  /** id of reference frame; -1: global frame  (nsensor x 1)*/
+  sensor_refid          :   Int32Array;
+  /** number of scalar outputs                 (nsensor x 1)*/
+  sensor_dim            :   Int32Array;
+  /** address in sensor array                  (nsensor x 1)*/
+  sensor_adr            :   Int32Array;
+  /** cutoff for real and positive; 0: ignore  (nsensor x 1)*/
+  sensor_cutoff         : Float64Array;
+  /** noise standard deviation                 (nsensor x 1)*/
+  sensor_noise          : Float64Array;
+  /** user data                                (nsensor x nuser_sensor)*/
+  sensor_user           : Float64Array;
+  /** plugin instance id; -1: not a plugin     (nsensor x 1)*/
+  sensor_plugin         :   Int32Array;
+  /** plugin instance id; -1: not in use       (nbody x 1)*/
+  plugin                :   Int32Array;
+  /** address in the plugin state array        (nplugin x 1)*/
+  plugin_stateadr       :   Int32Array;
+  /** number of states in the plugin instance  (nplugin x 1)*/
+  plugin_statenum       :   Int32Array;
+  /** config attributes of plugin instances    (npluginattr x 1)*/
+  plugin_attr           :   Uint8Array;
+  /** address to each instance's config attrib (nplugin x 1)*/
+  plugin_attradr        :   Int32Array;
+  /** address of field in numeric_data         (nnumeric x 1)*/
+  numeric_adr           :   Int32Array;
+  /** size of numeric field                    (nnumeric x 1)*/
+  numeric_size          :   Int32Array;
+  /** array of all numeric fields              (nnumericdata x 1)*/
+  numeric_data          : Float64Array;
+  /** address of text in text_data             (ntext x 1)*/
+  text_adr              :   Int32Array;
+  /** size of text field (strlen+1)            (ntext x 1)*/
+  text_size             :   Int32Array;
+  /** array of all text fields (0-terminated)  (ntextdata x 1)*/
+  text_data             :   Uint8Array;
+  /** address of text in text_data             (ntuple x 1)*/
+  tuple_adr             :   Int32Array;
+  /** number of objects in tuple               (ntuple x 1)*/
+  tuple_size            :   Int32Array;
+  /** array of object types in all tuples      (ntupledata x 1)*/
+  tuple_objtype         :   Int32Array;
+  /** array of object ids in all tuples        (ntupledata x 1)*/
+  tuple_objid           :   Int32Array;
+  /** array of object params in all tuples     (ntupledata x 1)*/
+  tuple_objprm          : Float64Array;
+  /** key time                                 (nkey x 1)*/
+  key_time              : Float64Array;
+  /** key position                             (nkey x nq)*/
+  key_qpos              : Float64Array;
+  /** key velocity                             (nkey x nv)*/
+  key_qvel              : Float64Array;
+  /** key activation                           (nkey x na)*/
+  key_act               : Float64Array;
+  /** key mocap position                       (nkey x nmocap*3)*/
+  key_mpos              : Float64Array;
+  /** key mocap quaternion                     (nkey x nmocap*4)*/
+  key_mquat             : Float64Array;
+  /** key control                              (nkey x nu)*/
+  key_ctrl              : Float64Array;
+  /** body name pointers                       (nbody x 1)*/
+  name_bodyadr          :   Int32Array;
+  /** joint name pointers                      (njnt x 1)*/
+  name_jntadr           :   Int32Array;
+  /** geom name pointers                       (ngeom x 1)*/
+  name_geomadr          :   Int32Array;
+  /** site name pointers                       (nsite x 1)*/
+  name_siteadr          :   Int32Array;
+  /** camera name pointers                     (ncam x 1)*/
+  name_camadr           :   Int32Array;
+  /** light name pointers                      (nlight x 1)*/
+  name_lightadr         :   Int32Array;
+  /** flex name pointers                       (nflex x 1)*/
+  name_flexadr          :   Int32Array;
+  /** mesh name pointers                       (nmesh x 1)*/
+  name_meshadr          :   Int32Array;
+  /** skin name pointers                       (nskin x 1)*/
+  name_skinadr          :   Int32Array;
+  /** hfield name pointers                     (nhfield x 1)*/
+  name_hfieldadr        :   Int32Array;
+  /** texture name pointers                    (ntex x 1)*/
+  name_texadr           :   Int32Array;
+  /** material name pointers                   (nmat x 1)*/
+  name_matadr           :   Int32Array;
+  /** geom pair name pointers                  (npair x 1)*/
+  name_pairadr          :   Int32Array;
+  /** exclude name pointers                    (nexclude x 1)*/
+  name_excludeadr       :   Int32Array;
+  /** equality constraint name pointers        (neq x 1)*/
+  name_eqadr            :   Int32Array;
+  /** tendon name pointers                     (ntendon x 1)*/
+  name_tendonadr        :   Int32Array;
+  /** actuator name pointers                   (nu x 1)*/
+  name_actuatoradr      :   Int32Array;
+  /** sensor name pointers                     (nsensor x 1)*/
+  name_sensoradr        :   Int32Array;
+  /** numeric name pointers                    (nnumeric x 1)*/
+  name_numericadr       :   Int32Array;
+  /** text name pointers                       (ntext x 1)*/
+  name_textadr          :   Int32Array;
+  /** tuple name pointers                      (ntuple x 1)*/
+  name_tupleadr         :   Int32Array;
+  /** keyframe name pointers                   (nkey x 1)*/
+  name_keyadr           :   Int32Array;
+  /** plugin instance name pointers            (nplugin x 1)*/
+  name_pluginadr        :   Int32Array;
+  /** names of all objects, 0-terminated       (nnames x 1)*/
+  names                 :   Uint8Array;
+  /** internal hash map of names               (nnames_map x 1)*/
+  names_map             :   Int32Array;
+  /** paths to assets, 0-terminated            (npaths x 1)*/
+  paths                 :   Uint8Array;
 }
 
 export interface State {
