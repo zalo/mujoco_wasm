@@ -1651,8 +1651,12 @@ export interface Simulation {
   resetData             (): void;
   /** Reset data to defaults, fill everything else with debug_value.*/
   resetDataDebug        (debug_value : string): void;
-  /** Reset data, set fields from specified keyframe.*/
+  /** Reset data. If 0 <= key < nkey, set fields from specified keyframe.*/
   resetDataKeyframe     (key : number): void;
+  /** Mark a new frame on the mjData stack.*/
+  markStack             (): void;
+  /** Free the current mjData stack frame. All pointers returned by mj_stackAlloc since the last call to mj_markStack must no longer be used afterwards.*/
+  freeStack             (): void;
   /** Free memory allocation in mjData.*/
   deleteData            (): void;
   /** Reset all callbacks to NULL pointers (NULL is the default).*/
@@ -1661,10 +1665,6 @@ export interface Simulation {
   printFormattedModel   (filename : string, float_format : string): void;
   /** Print model to text file.*/
   printModel            (filename : string): void;
-  /** Print mjData to text file, specifying format. float_format must be a valid printf-style format string for a single float value*/
-  printFormattedData    (filename : string, float_format : string): void;
-  /** Print data to text file.*/
-  printData             (filename : string): void;
   /** Print matrix to screen.    [Only works with MuJoCo Allocated Arrays!]*/
   _printMat             (mat : Float64Array, nr : number, nc : number): void;
   /** Run position-dependent computations.*/
@@ -1681,6 +1681,8 @@ export interface Simulation {
   Euler                 (): void;
   /** Runge-Kutta explicit order-N integrator.*/
   RungeKutta            (N : number): void;
+  /** Implicit-in-velocity integrators.*/
+  implicit              (): void;
   /** Run position-dependent computations in inverse dynamics.*/
   invPosition           (): void;
   /** Run velocity-dependent computations in inverse dynamics.*/
@@ -1711,6 +1713,8 @@ export interface Simulation {
   comPos                (): void;
   /** Compute camera and light positions and orientations.*/
   camlight              (): void;
+  /** Compute flex-related quantities.*/
+  flex                  (): void;
   /** Compute tendon lengths, velocities and moment arms.*/
   tendon                (): void;
   /** Compute actuator transmission lengths and moments.*/
@@ -1722,12 +1726,12 @@ export interface Simulation {
   /** Solve linear system M * x = y using factorization:  x = inv(L'*D*L)*y    [Only works with MuJoCo Allocated Arrays!]*/
   solveM                (x : Float64Array, y : Float64Array, n : number): void;
   /** Half of linear solve:  x = sqrt(inv(D))*inv(L')*y    [Only works with MuJoCo Allocated Arrays!]*/
-  solveM2               (x : Float64Array, y : Float64Array, n : number): void;
+  solveM2               (x : Float64Array, y : Float64Array, sqrtInvD : Float64Array, n : number): void;
   /** Compute cvel, cdof_dot.*/
   comVel                (): void;
-  /** Compute qfrc_passive from spring-dampers, viscosity and density.*/
+  /** Compute qfrc_passive from spring-dampers, gravity compensation and fluid forces.*/
   passive               (): void;
-  /** subtree linear velocity and angular momentum*/
+  /** Sub-tree linear velocity and angular momentum: compute subtree_linvel, subtree_angmom.*/
   subtreeVel            (): void;
   /** RNE: compute M(qpos)*qacc + C(qpos,qvel); flg_acc=0 removes inertial term.    [Only works with MuJoCo Allocated Arrays!]*/
   rne                   (flg_acc : number, result : Float64Array): void;
@@ -1737,22 +1741,26 @@ export interface Simulation {
   collision             (): void;
   /** Construct constraints.*/
   makeConstraint        (): void;
+  /** Find constraint islands.*/
+  island                (): void;
   /** Compute inverse constraint inertia efc_AR.*/
   projectConstraint     (): void;
   /** Compute efc_vel, efc_aref.*/
   referenceConstraint   (): void;
+  /** Return size of state specification.*/
+  stateSize             (spec : unsigned number): number;
+  /** Set state.    [Only works with MuJoCo Allocated Arrays!]*/
+  setState              (state : Float64Array, spec : unsigned number): void;
   /** Determine type of friction cone.*/
   isPyramidal           (): number;
   /** Determine type of constraint Jacobian.*/
   isSparse              (): number;
   /** Determine type of solver (PGS is dual, CG and Newton are primal).*/
   isDual                (): number;
-  /** Multiply dense or sparse constraint Jacobian by vector.    [Only works with MuJoCo Allocated Arrays!]*/
-  mulJacVec             (res : Float64Array, vec : Float64Array): void;
-  /** Multiply dense or sparse constraint Jacobian transpose by vector.    [Only works with MuJoCo Allocated Arrays!]*/
-  mulJacTVec            (res : Float64Array, vec : Float64Array): void;
   /** Compute subtree center-of-mass end-effector Jacobian.    [Only works with MuJoCo Allocated Arrays!]*/
   jacSubtreeCom         (jacp : Float64Array, body : number): void;
+  /** Compute subtree angular momentum matrix.    [Only works with MuJoCo Allocated Arrays!]*/
+  angmomMat             (mat : Float64Array, body : number): void;
   /** Get id of object with the specified mjtObj type and name, returns -1 if id not found.*/
   name2id               (type : number, name : string): number;
   /** Get name of object with the specified mjtObj type and id, returns NULL if name not found.*/
@@ -1803,16 +1811,12 @@ export interface Simulation {
   warning               (warning : number, info : number): void;
   /** Write [datetime, type: message] to MUJOCO_LOG.TXT.*/
   _writeLog             (type : string, msg : string): void;
-  /** Return 1 (for backward compatibility).*/
-  activate              (filename : string): number;
-  /** Do nothing (for backward compatibility).*/
-  deactivate            (): void;
   /** Set res = 0.    [Only works with MuJoCo Allocated Arrays!]*/
   _zero                 (res : Float64Array, n : number): void;
   /** Set res = val.    [Only works with MuJoCo Allocated Arrays!]*/
   _fill                 (res : Float64Array, val : number, n : number): void;
   /** Set res = vec.    [Only works with MuJoCo Allocated Arrays!]*/
-  _copy                 (res : Float64Array, data : Float64Array, n : number): void;
+  _copy                 (res : Float64Array, vec : Float64Array, n : number): void;
   /** Return sum(vec).    [Only works with MuJoCo Allocated Arrays!]*/
   _sum                  (vec : Float64Array, n : number): number;
   /** Return L1 norm: sum(abs(vec)).    [Only works with MuJoCo Allocated Arrays!]*/
@@ -1859,10 +1863,22 @@ export interface Simulation {
   _sqrMatTD             (res : Float64Array, mat : Float64Array, diag : Float64Array, nr : number, nc : number): void;
   /** Cholesky decomposition: mat = L*L'; return rank, decomposition performed in-place into mat.    [Only works with MuJoCo Allocated Arrays!]*/
   _cholFactor           (mat : Float64Array, n : number, mindiag : number): number;
-  /** Solve mat * res = vec, where mat is Cholesky-factorized    [Only works with MuJoCo Allocated Arrays!]*/
+  /** Solve (mat*mat') * res = vec, where mat is a Cholesky factor.    [Only works with MuJoCo Allocated Arrays!]*/
   _cholSolve            (res : Float64Array, mat : Float64Array, vec : Float64Array, n : number): void;
   /** Cholesky rank-one update: L*L' +/- x*x'; return rank.    [Only works with MuJoCo Allocated Arrays!]*/
   _cholUpdate           (mat : Float64Array, x : Float64Array, n : number, flg_plus : number): number;
+  /** Band-dense Cholesky decomposition.  Returns minimum value in the factorized diagonal, or 0 if rank-deficient.  mat has (ntotal-ndense) x nband + ndense x ntotal elements.  The first (ntotal-ndense) x nband store the band part, left of diagonal, inclusive.  The second ndense x ntotal store the band part as entire dense rows.  Add diagadd+diagmul*mat_ii to diagonal before factorization.    [Only works with MuJoCo Allocated Arrays!]*/
+  _cholFactorBand       (mat : Float64Array, ntotal : number, nband : number, ndense : number, diagadd : number, diagmul : number): number;
+  /** Solve (mat*mat')*res = vec where mat is a band-dense Cholesky factor.    [Only works with MuJoCo Allocated Arrays!]*/
+  _cholSolveBand        (res : Float64Array, mat : Float64Array, vec : Float64Array, ntotal : number, nband : number, ndense : number): void;
+  /** Convert banded matrix to dense matrix, fill upper triangle if flg_sym>0.    [Only works with MuJoCo Allocated Arrays!]*/
+  _band2Dense           (res : Float64Array, mat : Float64Array, ntotal : number, nband : number, ndense : number, flg_sym : mjtByte): void;
+  /** Convert dense matrix to banded matrix.    [Only works with MuJoCo Allocated Arrays!]*/
+  _dense2Band           (res : Float64Array, mat : Float64Array, ntotal : number, nband : number, ndense : number): void;
+  /** Multiply band-diagonal matrix with nvec vectors, include upper triangle if flg_sym>0.    [Only works with MuJoCo Allocated Arrays!]*/
+  _bandMulMatVec        (res : Float64Array, mat : Float64Array, vec : Float64Array, ntotal : number, nband : number, ndense : number, nvec : number, flg_sym : mjtByte): void;
+  /** Address of diagonal element i in band-dense matrix representation.*/
+  _bandDiag             (i : number, ntotal : number, nband : number, ndense : number): number;
   /** Convert contact force to pyramid representation.    [Only works with MuJoCo Allocated Arrays!]*/
   _encodePyramid        (pyramid : Float64Array, force : Float64Array, mu : Float64Array, dim : number): void;
   /** Convert pyramid representation to contact force.    [Only works with MuJoCo Allocated Arrays!]*/
@@ -1897,12 +1913,16 @@ export interface Simulation {
   _insertionSort        (list : Float64Array, n : number): void;
   /** Generate Halton sequence.*/
   _Halton               (index : number, base : number): number;
-  /** Sigmoid function over 0<=x<=1 constructed from half-quadratics.*/
+  /** Sigmoid function over 0<=x<=1 using quintic polynomial.*/
   _sigmoid              (x : number): number;
   /** Finite differenced transition matrices (control theory notation)   d(x_next) = A*dx + B*du   d(sensor) = C*dx + D*du   required output matrix dimensions:      A: (2*nv+na x 2*nv+na)      B: (2*nv+na x nu)      D: (nsensordata x 2*nv+na)      C: (nsensordata x nu)    [Only works with MuJoCo Allocated Arrays!]*/
-  _transitionFD         (eps : number, centered : mjtByte, A : Float64Array, B : Float64Array, C : Float64Array, D : Float64Array): void;
+  _transitionFD         (eps : number, flg_centered : mjtByte, A : Float64Array, B : Float64Array, C : Float64Array, D : Float64Array): void;
+  /** Finite differenced Jacobians of (force, sensors) = mj_inverse(state, acceleration)   All outputs are optional. Output dimensions (transposed w.r.t Control Theory convention):     DfDq: (nv x nv)     DfDv: (nv x nv)     DfDa: (nv x nv)     DsDq: (nv x nsensordata)     DsDv: (nv x nsensordata)     DsDa: (nv x nsensordata)     DmDq: (nv x nM)   single-letter shortcuts:     inputs: q=qpos, v=qvel, a=qacc     outputs: f=qfrc_inverse, s=sensordata, m=qM   notes:     optionally computes mass matrix Jacobian DmDq     flg_actuation specifies whether to subtract qfrc_actuator from qfrc_inverse    [Only works with MuJoCo Allocated Arrays!]*/
+  _inverseFD            (eps : number, flg_actuation : mjtByte, DfDq : Float64Array, DfDv : Float64Array, DfDa : Float64Array, DsDq : Float64Array, DsDv : Float64Array, DsDa : Float64Array, DmDq : Float64Array): void;
   /** Return the number of globally registered plugins.*/
   _pluginCount          (): number;
+  /** Return the number of globally registered resource providers.*/
+  _resourceProviderCount(): number;
 }
 
 export interface mujoco extends EmscriptenModule {

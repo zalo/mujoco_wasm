@@ -553,12 +553,12 @@ public:
   void   resetData           (                    ) { return mj_resetData                (_model->ptr(), _state->ptr()); }
   void   resetDataDebug      (unsigned char debug_value) { return mj_resetDataDebug           (_model->ptr(), _state->ptr(), debug_value); }
   void   resetDataKeyframe   (int key             ) { return mj_resetDataKeyframe        (_model->ptr(), _state->ptr(), key); }
+  void   markStack           (                    ) { return mj_markStack                (_state->ptr()       ); }
+  void   freeStack           (                    ) { return mj_freeStack                (_state->ptr()       ); }
   void   deleteData          (                    ) { return mj_deleteData               (_state->ptr()       ); }
   void   resetCallbacks      (                    ) { return mj_resetCallbacks           (                    ); }
   void   printFormattedModel (std::string filename, std::string float_format) { return mj_printFormattedModel      (_model->ptr(), filename.c_str(), float_format.c_str()); }
   void   printModel          (std::string filename) { return mj_printModel               (_model->ptr(), filename.c_str()); }
-  void   printFormattedData  (std::string filename, std::string float_format) { return mj_printFormattedData       (_model->ptr(), _state->ptr(), filename.c_str(), float_format.c_str()); }
-  void   printData           (std::string filename) { return mj_printData                (_model->ptr(), _state->ptr(), filename.c_str()); }
   void   _printMat           (val mat, int nr, int nc) { return mju_printMat                (reinterpret_cast<mjtNum*>(mat["byteOffset"].as<int>()), nr, nc); }
   void   fwdPosition         (                    ) { return mj_fwdPosition              (_model->ptr(), _state->ptr()); }
   void   fwdVelocity         (                    ) { return mj_fwdVelocity              (_model->ptr(), _state->ptr()); }
@@ -567,6 +567,7 @@ public:
   void   fwdConstraint       (                    ) { return mj_fwdConstraint            (_model->ptr(), _state->ptr()); }
   void   Euler               (                    ) { return mj_Euler                    (_model->ptr(), _state->ptr()); }
   void   RungeKutta          (int N               ) { return mj_RungeKutta               (_model->ptr(), _state->ptr(), N); }
+  void   implicit            (                    ) { return mj_implicit                 (_model->ptr(), _state->ptr()); }
   void   invPosition         (                    ) { return mj_invPosition              (_model->ptr(), _state->ptr()); }
   void   invVelocity         (                    ) { return mj_invVelocity              (_model->ptr(), _state->ptr()); }
   void   invConstraint       (                    ) { return mj_invConstraint            (_model->ptr(), _state->ptr()); }
@@ -582,12 +583,13 @@ public:
   void   kinematics          (                    ) { return mj_kinematics               (_model->ptr(), _state->ptr()); }
   void   comPos              (                    ) { return mj_comPos                   (_model->ptr(), _state->ptr()); }
   void   camlight            (                    ) { return mj_camlight                 (_model->ptr(), _state->ptr()); }
+  void   flex                (                    ) { return mj_flex                     (_model->ptr(), _state->ptr()); }
   void   tendon              (                    ) { return mj_tendon                   (_model->ptr(), _state->ptr()); }
   void   transmission        (                    ) { return mj_transmission             (_model->ptr(), _state->ptr()); }
   void   crbCalculate        (                    ) { return mj_crb                      (_model->ptr(), _state->ptr()); }
   void   factorM             (                    ) { return mj_factorM                  (_model->ptr(), _state->ptr()); }
   void   solveM              (val x, val y, int n ) { return mj_solveM                   (_model->ptr(), _state->ptr(), reinterpret_cast<mjtNum*>(x["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(y["byteOffset"].as<int>()), n); }
-  void   solveM2             (val x, val y, int n ) { return mj_solveM2                  (_model->ptr(), _state->ptr(), reinterpret_cast<mjtNum*>(x["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(y["byteOffset"].as<int>()), n); }
+  void   solveM2             (val x, val y, val sqrtInvD, int n) { return mj_solveM2                  (_model->ptr(), _state->ptr(), reinterpret_cast<mjtNum*>(x["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(y["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(sqrtInvD["byteOffset"].as<int>()), n); }
   void   comVel              (                    ) { return mj_comVel                   (_model->ptr(), _state->ptr()); }
   void   passive             (                    ) { return mj_passive                  (_model->ptr(), _state->ptr()); }
   void   subtreeVel          (                    ) { return mj_subtreeVel               (_model->ptr(), _state->ptr()); }
@@ -595,14 +597,16 @@ public:
   void   rnePostConstraint   (                    ) { return mj_rnePostConstraint        (_model->ptr(), _state->ptr()); }
   void   collision           (                    ) { return mj_collision                (_model->ptr(), _state->ptr()); }
   void   makeConstraint      (                    ) { return mj_makeConstraint           (_model->ptr(), _state->ptr()); }
+  void   island              (                    ) { return mj_island                   (_model->ptr(), _state->ptr()); }
   void   projectConstraint   (                    ) { return mj_projectConstraint        (_model->ptr(), _state->ptr()); }
   void   referenceConstraint (                    ) { return mj_referenceConstraint      (_model->ptr(), _state->ptr()); }
+  int    stateSize           (unsigned int spec   ) { return mj_stateSize                (_model->ptr(), spec ); }
+  void   setState            (val state, unsigned int spec) { return mj_setState                 (_model->ptr(), _state->ptr(), reinterpret_cast<mjtNum*>(state["byteOffset"].as<int>()), spec); }
   int    isPyramidal         (                    ) { return mj_isPyramidal              (_model->ptr()       ); }
   int    isSparse            (                    ) { return mj_isSparse                 (_model->ptr()       ); }
   int    isDual              (                    ) { return mj_isDual                   (_model->ptr()       ); }
-  void   mulJacVec           (val res, val vec    ) { return mj_mulJacVec                (_model->ptr(), _state->ptr(), reinterpret_cast<mjtNum*>(res["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(vec["byteOffset"].as<int>())); }
-  void   mulJacTVec          (val res, val vec    ) { return mj_mulJacTVec               (_model->ptr(), _state->ptr(), reinterpret_cast<mjtNum*>(res["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(vec["byteOffset"].as<int>())); }
   void   jacSubtreeCom       (val jacp, int body  ) { return mj_jacSubtreeCom            (_model->ptr(), _state->ptr(), reinterpret_cast<mjtNum*>(jacp["byteOffset"].as<int>()), body); }
+  void   angmomMat           (val mat, int body   ) { return mj_angmomMat                (_model->ptr(), _state->ptr(), reinterpret_cast<mjtNum*>(mat["byteOffset"].as<int>()), body); }
   int    name2id             (int type, std::string name) { return mj_name2id                  (_model->ptr(), type, name.c_str()); }
   std::string id2name             (int type, int id    ) { return std::string(mj_id2name                  (_model->ptr(), type, id)); }
   void   fullM               (val dst, val M      ) { return mj_fullM                    (_model->ptr(), reinterpret_cast<mjtNum*>(dst["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(M["byteOffset"].as<int>())); }
@@ -628,11 +632,9 @@ public:
   void   _clearHandlers      (                    ) { return mju_clearHandlers           (                    ); }
   void   warning             (int warning, int info) { return mj_warning                  (_state->ptr(), warning, info); }
   void   _writeLog           (std::string type, std::string msg) { return mju_writeLog                (type.c_str(), msg.c_str()); }
-  int    activate            (std::string filename) { return mj_activate                 (filename.c_str()    ); }
-  void   deactivate          (                    ) { return mj_deactivate               (                    ); }
   void   _zero               (val res, int n      ) { return mju_zero                    (reinterpret_cast<mjtNum*>(res["byteOffset"].as<int>()), n); }
   void   _fill               (val res, mjtNum val, int n) { return mju_fill                    (reinterpret_cast<mjtNum*>(res["byteOffset"].as<int>()), val, n); }
-  void   _copy               (val res, val data, int n) { return mju_copy                    (reinterpret_cast<mjtNum*>(res["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(data["byteOffset"].as<int>()), n); }
+  void   _copy               (val res, val vec, int n) { return mju_copy                    (reinterpret_cast<mjtNum*>(res["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(vec["byteOffset"].as<int>()), n); }
   mjtNum _sum                (val vec, int n      ) { return mju_sum                     (reinterpret_cast<mjtNum*>(vec["byteOffset"].as<int>()), n); }
   mjtNum _L1                 (val vec, int n      ) { return mju_L1                      (reinterpret_cast<mjtNum*>(vec["byteOffset"].as<int>()), n); }
   void   _scl                (val res, val vec, mjtNum scl, int n) { return mju_scl                     (reinterpret_cast<mjtNum*>(res["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(vec["byteOffset"].as<int>()), scl, n); }
@@ -658,6 +660,12 @@ public:
   int    _cholFactor         (val mat, int n, mjtNum mindiag) { return mju_cholFactor              (reinterpret_cast<mjtNum*>(mat["byteOffset"].as<int>()), n, mindiag); }
   void   _cholSolve          (val res, val mat, val vec, int n) { return mju_cholSolve               (reinterpret_cast<mjtNum*>(res["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(mat["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(vec["byteOffset"].as<int>()), n); }
   int    _cholUpdate         (val mat, val x, int n, int flg_plus) { return mju_cholUpdate              (reinterpret_cast<mjtNum*>(mat["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(x["byteOffset"].as<int>()), n, flg_plus); }
+  mjtNum _cholFactorBand     (val mat, int ntotal, int nband, int ndense, mjtNum diagadd, mjtNum diagmul) { return mju_cholFactorBand          (reinterpret_cast<mjtNum*>(mat["byteOffset"].as<int>()), ntotal, nband, ndense, diagadd, diagmul); }
+  void   _cholSolveBand      (val res, val mat, val vec, int ntotal, int nband, int ndense) { return mju_cholSolveBand           (reinterpret_cast<mjtNum*>(res["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(mat["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(vec["byteOffset"].as<int>()), ntotal, nband, ndense); }
+  void   _band2Dense         (val res, val mat, int ntotal, int nband, int ndense, mjtByte flg_sym) { return mju_band2Dense              (reinterpret_cast<mjtNum*>(res["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(mat["byteOffset"].as<int>()), ntotal, nband, ndense, flg_sym); }
+  void   _dense2Band         (val res, val mat, int ntotal, int nband, int ndense) { return mju_dense2Band              (reinterpret_cast<mjtNum*>(res["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(mat["byteOffset"].as<int>()), ntotal, nband, ndense); }
+  void   _bandMulMatVec      (val res, val mat, val vec, int ntotal, int nband, int ndense, int nvec, mjtByte flg_sym) { return mju_bandMulMatVec           (reinterpret_cast<mjtNum*>(res["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(mat["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(vec["byteOffset"].as<int>()), ntotal, nband, ndense, nvec, flg_sym); }
+  int    _bandDiag           (int i, int ntotal, int nband, int ndense) { return mju_bandDiag                (i, ntotal, nband, ndense); }
   void   _encodePyramid      (val pyramid, val force, val mu, int dim) { return mju_encodePyramid           (reinterpret_cast<mjtNum*>(pyramid["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(force["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(mu["byteOffset"].as<int>()), dim); }
   void   _decodePyramid      (val force, val pyramid, val mu, int dim) { return mju_decodePyramid           (reinterpret_cast<mjtNum*>(force["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(pyramid["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(mu["byteOffset"].as<int>()), dim); }
   mjtNum _springDamper       (mjtNum pos0, mjtNum vel0, mjtNum Kp, mjtNum Kv, mjtNum dt) { return mju_springDamper            (pos0, vel0, Kp, Kv, dt); }
@@ -676,8 +684,10 @@ public:
   void   _insertionSort      (val list, int n     ) { return mju_insertionSort           (reinterpret_cast<mjtNum*>(list["byteOffset"].as<int>()), n); }
   mjtNum _Halton             (int index, int base ) { return mju_Halton                  (index, base         ); }
   mjtNum _sigmoid            (mjtNum x            ) { return mju_sigmoid                 (x                   ); }
-  void   _transitionFD       (mjtNum eps, mjtByte centered, val A, val B, val C, val D) { return mjd_transitionFD            (_model->ptr(), _state->ptr(), eps, centered, reinterpret_cast<mjtNum*>(A["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(B["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(C["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(D["byteOffset"].as<int>())); }
+  void   _transitionFD       (mjtNum eps, mjtByte flg_centered, val A, val B, val C, val D) { return mjd_transitionFD            (_model->ptr(), _state->ptr(), eps, flg_centered, reinterpret_cast<mjtNum*>(A["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(B["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(C["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(D["byteOffset"].as<int>())); }
+  void   _inverseFD          (mjtNum eps, mjtByte flg_actuation, val DfDq, val DfDv, val DfDa, val DsDq, val DsDv, val DsDa, val DmDq) { return mjd_inverseFD               (_model->ptr(), _state->ptr(), eps, flg_actuation, reinterpret_cast<mjtNum*>(DfDq["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(DfDv["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(DfDa["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(DsDq["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(DsDv["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(DsDa["byteOffset"].as<int>()), reinterpret_cast<mjtNum*>(DmDq["byteOffset"].as<int>())); }
   int    _pluginCount        (                    ) { return mjp_pluginCount             (                    ); }
+  int    _resourceProviderCount(                    ) { return mjp_resourceProviderCount   (                    ); }
 
 
 private:
@@ -1408,12 +1418,12 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("resetData"             , &Simulation::resetData             )
       .function("resetDataDebug"        , &Simulation::resetDataDebug        )
       .function("resetDataKeyframe"     , &Simulation::resetDataKeyframe     )
+      .function("markStack"             , &Simulation::markStack             )
+      .function("freeStack"             , &Simulation::freeStack             )
       .function("deleteData"            , &Simulation::deleteData            )
       .function("resetCallbacks"        , &Simulation::resetCallbacks        )
       .function("printFormattedModel"   , &Simulation::printFormattedModel   )
       .function("printModel"            , &Simulation::printModel            )
-      .function("printFormattedData"    , &Simulation::printFormattedData    )
-      .function("printData"             , &Simulation::printData             )
       .function("_printMat"             , &Simulation::_printMat             , allow_raw_pointers())
       .function("fwdPosition"           , &Simulation::fwdPosition           )
       .function("fwdVelocity"           , &Simulation::fwdVelocity           )
@@ -1422,6 +1432,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("fwdConstraint"         , &Simulation::fwdConstraint         )
       .function("Euler"                 , &Simulation::Euler                 )
       .function("RungeKutta"            , &Simulation::RungeKutta            )
+      .function("implicit"              , &Simulation::implicit              )
       .function("invPosition"           , &Simulation::invPosition           )
       .function("invVelocity"           , &Simulation::invVelocity           )
       .function("invConstraint"         , &Simulation::invConstraint         )
@@ -1437,6 +1448,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("kinematics"            , &Simulation::kinematics            )
       .function("comPos"                , &Simulation::comPos                )
       .function("camlight"              , &Simulation::camlight              )
+      .function("flex"                  , &Simulation::flex                  )
       .function("tendon"                , &Simulation::tendon                )
       .function("transmission"          , &Simulation::transmission          )
       .function("crbCalculate"          , &Simulation::crbCalculate          )
@@ -1450,14 +1462,16 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("rnePostConstraint"     , &Simulation::rnePostConstraint     )
       .function("collision"             , &Simulation::collision             )
       .function("makeConstraint"        , &Simulation::makeConstraint        )
+      .function("island"                , &Simulation::island                )
       .function("projectConstraint"     , &Simulation::projectConstraint     )
       .function("referenceConstraint"   , &Simulation::referenceConstraint   )
+      .function("stateSize"             , &Simulation::stateSize             )
+      .function("setState"              , &Simulation::setState              , allow_raw_pointers())
       .function("isPyramidal"           , &Simulation::isPyramidal           )
       .function("isSparse"              , &Simulation::isSparse              )
       .function("isDual"                , &Simulation::isDual                )
-      .function("mulJacVec"             , &Simulation::mulJacVec             , allow_raw_pointers())
-      .function("mulJacTVec"            , &Simulation::mulJacTVec            , allow_raw_pointers())
       .function("jacSubtreeCom"         , &Simulation::jacSubtreeCom         , allow_raw_pointers())
+      .function("angmomMat"             , &Simulation::angmomMat             , allow_raw_pointers())
       .function("name2id"               , &Simulation::name2id               )
       .function("id2name"               , &Simulation::id2name               )
       .function("fullM"                 , &Simulation::fullM                 , allow_raw_pointers())
@@ -1483,8 +1497,6 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("_clearHandlers"        , &Simulation::_clearHandlers        )
       .function("warning"               , &Simulation::warning               )
       .function("_writeLog"             , &Simulation::_writeLog             )
-      .function("activate"              , &Simulation::activate              )
-      .function("deactivate"            , &Simulation::deactivate            )
       .function("_zero"                 , &Simulation::_zero                 , allow_raw_pointers())
       .function("_fill"                 , &Simulation::_fill                 , allow_raw_pointers())
       .function("_copy"                 , &Simulation::_copy                 , allow_raw_pointers())
@@ -1513,6 +1525,12 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("_cholFactor"           , &Simulation::_cholFactor           , allow_raw_pointers())
       .function("_cholSolve"            , &Simulation::_cholSolve            , allow_raw_pointers())
       .function("_cholUpdate"           , &Simulation::_cholUpdate           , allow_raw_pointers())
+      .function("_cholFactorBand"       , &Simulation::_cholFactorBand       , allow_raw_pointers())
+      .function("_cholSolveBand"        , &Simulation::_cholSolveBand        , allow_raw_pointers())
+      .function("_band2Dense"           , &Simulation::_band2Dense           , allow_raw_pointers())
+      .function("_dense2Band"           , &Simulation::_dense2Band           , allow_raw_pointers())
+      .function("_bandMulMatVec"        , &Simulation::_bandMulMatVec        , allow_raw_pointers())
+      .function("_bandDiag"             , &Simulation::_bandDiag             )
       .function("_encodePyramid"        , &Simulation::_encodePyramid        , allow_raw_pointers())
       .function("_decodePyramid"        , &Simulation::_decodePyramid        , allow_raw_pointers())
       .function("_springDamper"         , &Simulation::_springDamper         )
@@ -1532,7 +1550,9 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("_Halton"               , &Simulation::_Halton               )
       .function("_sigmoid"              , &Simulation::_sigmoid              )
       .function("_transitionFD"         , &Simulation::_transitionFD         , allow_raw_pointers())
+      .function("_inverseFD"            , &Simulation::_inverseFD            , allow_raw_pointers())
       .function("_pluginCount"          , &Simulation::_pluginCount          )
+      .function("_resourceProviderCount" , &Simulation::_resourceProviderCount)
       ;
 
   value_object<mjModel>("mjModel")
