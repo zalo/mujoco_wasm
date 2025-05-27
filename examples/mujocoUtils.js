@@ -418,15 +418,19 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
           let width    = model.tex_width [texId];
           let height   = model.tex_height[texId];
           let offset   = model.tex_adr   [texId];
-          let rgbArray = model.tex_rgb   ;
+          let channels = model.tex_nchannel[texId];
+          let texData  = model.tex_data;
           let rgbaArray = new Uint8Array(width * height * 4);
           for (let p = 0; p < width * height; p++){
-            rgbaArray[(p * 4) + 0] = rgbArray[offset + ((p * 3) + 0)];
-            rgbaArray[(p * 4) + 1] = rgbArray[offset + ((p * 3) + 1)];
-            rgbaArray[(p * 4) + 2] = rgbArray[offset + ((p * 3) + 2)];
+            rgbaArray[(p * 4) + 0] = texData[offset + ((p * channels) + 0)];
+            rgbaArray[(p * 4) + 1] = texData[offset + ((p * channels) + 1)];
+            rgbaArray[(p * 4) + 2] = texData[offset + ((p * channels) + 2)];
             rgbaArray[(p * 4) + 3] = 1.0;
           }
           texture = new THREE.DataTexture(rgbaArray, width, height, THREE.RGBAFormat, THREE.UnsignedByteType);
+          texture.repeat = new THREE.Vector2(model.mat_texrepeat[model.geom_matid[g]  ],
+                                             model.mat_texrepeat[model.geom_matid[g]+1]);
+          texture.needsUpdate = true;
           if (texId == 2) {
             texture.repeat = new THREE.Vector2(50, 50);
             texture.wrapS = THREE.RepeatWrapping;
@@ -445,7 +449,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
           material.color.g != color[1] ||
           material.color.b != color[2] ||
           material.opacity != color[3] ||
-          material.map     != texture) {
+          material.map     !== texture) {
         material = new THREE.MeshPhysicalMaterial({
           color: new THREE.Color(color[0], color[1], color[2]),
           transparent: color[3] < 1.0,
@@ -453,14 +457,14 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
           specularIntensity: model.geom_matid[g] != -1 ?       model.mat_specular   [model.geom_matid[g]] *0.5 : undefined,
           reflectivity     : model.geom_matid[g] != -1 ?       model.mat_reflectance[model.geom_matid[g]] : undefined,
           roughness        : model.geom_matid[g] != -1 ? 1.0 - model.mat_shininess  [model.geom_matid[g]] : undefined,
-          metalness        : model.geom_matid[g] != -1 ? 0.1 : undefined,
+          metalness        : model.geom_matid[g] != -1 ?       model.mat_metallic   [model.geom_matid[g]] : undefined,
           map              : texture
         });
       }
 
       let mesh = new THREE.Mesh();
       if (type == 0) {
-        mesh = new Reflector( new THREE.PlaneGeometry( 100, 100 ), { clipBias: 0.003,texture: texture } );
+        mesh = new Reflector( new THREE.PlaneGeometry( 100, 100 ), { clipBias: 0.003, texture: texture } );
         mesh.rotateX( - Math.PI / 2 );
       } else {
         mesh = new THREE.Mesh(geometry, material);

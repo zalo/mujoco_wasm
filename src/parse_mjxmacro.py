@@ -78,7 +78,6 @@ with open("include/mujoco/mjxmacro.h") as f:
                                        auto_gen_lines[parse_mode[1]+"_bindings"], 
                                        auto_gen_lines[parse_mode[1]+"_typescript"])
                 else:
-                    print(line)
                     parse_mode = (None, None)
 
             if parse_mode[0] == "ints":
