@@ -312,8 +312,8 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       if (!(model.geom_group[g] < 3)) { continue; }
 
       // Get the body ID and type of the geom.
-      let b = model.geom_bodyid[g];
-      let type = model.geom_type[g];
+      let b    = model.geom_bodyid[g];
+      let type = model.geom_type  [g];
       let size = [
         model.geom_size[(g*3) + 0],
         model.geom_size[(g*3) + 1],
@@ -412,7 +412,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
           model.mat_rgba[(matId * 4) + 2],
           model.mat_rgba[(matId * 4) + 3]];
 
-        // Construct Texture from model.tex_rgb
+        // Construct Texture from model.tex_data
         texture = undefined;
         let texId = model.mat_texid[matId];
         if (texId != -1) {
@@ -429,15 +429,13 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
             rgbaArray[(p * 4) + 3] = 1.0;
           }
           texture = new THREE.DataTexture(rgbaArray, width, height, THREE.RGBAFormat, THREE.UnsignedByteType);
-          texture.repeat = new THREE.Vector2(model.mat_texrepeat[model.geom_matid[g]  ],
-                                             model.mat_texrepeat[model.geom_matid[g]+1]);
-          texture.needsUpdate = true;
           if (texId == 2) {
-            texture.repeat = new THREE.Vector2(50, 50);
+            texture.repeat = new THREE.Vector2(150, 25);
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
           } else {
-            texture.repeat = new THREE.Vector2(1, 1);
+            texture.repeat = new THREE.Vector2(model.mat_texrepeat[model.geom_matid[g]  ],
+                                               model.mat_texrepeat[model.geom_matid[g]+1]);
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
           }
