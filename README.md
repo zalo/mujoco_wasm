@@ -28,7 +28,9 @@ This repo is a fork of @stillonearth 's starter repository, adding tons of funct
 
 **1. Install emscripten**
 
-**2. Build the mujoco_wasm Binary**
+**2. Autogenerate the bindings by running src/parse_mjxmacro.py**
+
+**3. Build the mujoco_wasm Binary**
 
 On Linux, use:
 ```bash
@@ -40,7 +42,9 @@ make
 
 On Windows, run `build_windows.bat`.
 
-*3. (Optional) Update MuJoCo libs*
+An older version of Emscripten (<3.1.56) may be necessary.
+
+*4. (Optional) Update MuJoCo libs*
 
 Build MuJoCo libs with wasm target and place to lib. Currently v2.3.1 included.
 
