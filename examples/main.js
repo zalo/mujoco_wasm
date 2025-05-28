@@ -55,6 +55,8 @@ export class MuJoCoDemo {
     this.renderer.setSize( window.innerWidth, window.innerHeight );
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    //this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.setAnimationLoop( this.render.bind(this) );
 
     this.container.appendChild( this.renderer.domElement );

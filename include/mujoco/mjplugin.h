@@ -17,23 +17,71 @@
 
 #include <mujoco/mjdata.h>
 #include <mujoco/mjmodel.h>
+#include <mujoco/mjtnum.h>
 #include <mujoco/mjvisualize.h>
 
 
-typedef enum mjtPluginTypeBit_ {
-  mjPLUGIN_ACTUATOR = 1<<0,
-  mjPLUGIN_SENSOR   = 1<<1,
-  mjPLUGIN_PASSIVE  = 1<<2,
-} mjtPluginTypeBit;
+//---------------------------------- Resource Provider ---------------------------------------------
+
+struct mjResource_ {
+  char* name;                                   // name of resource (filename, etc)
+  void* data;                                   // opaque data pointer
+  char timestamp[512];                          // timestamp of the resource
+  const struct mjpResourceProvider* provider;   // pointer to the provider
+};
+typedef struct mjResource_ mjResource;
+
+// callback for opening a resource, returns zero on failure
+typedef int (*mjfOpenResource)(mjResource* resource);
+
+// callback for reading a resource
+// return number of bytes stored in buffer, return -1 if error
+typedef int (*mjfReadResource)(mjResource* resource, const void** buffer);
+
+// callback for closing a resource (responsible for freeing any allocated memory)
+typedef void (*mjfCloseResource)(mjResource* resource);
+
+// callback for returning the directory of a resource
+// sets dir to directory string with ndir being size of directory string
+typedef void (*mjfGetResourceDir)(mjResource* resource, const char** dir, int* ndir);
+
+// callback for checking if the current resource was modified from the time
+// specified by the timestamp
+// returns 0 if the resource's timestamp matches the provided timestamp
+// returns > 0 if the resource is younger than the given timestamp
+// returns < 0 if the resource is older than the given timestamp
+typedef int (*mjfResourceModified)(const mjResource* resource, const char* timestamp);
+
+// struct describing a single resource provider
+struct mjpResourceProvider {
+  const char* prefix;               // prefix for match against a resource name
+  mjfOpenResource open;             // opening callback
+  mjfReadResource read;             // reading callback
+  mjfCloseResource close;           // closing callback
+  mjfGetResourceDir getdir;         // get directory callback (optional)
+  mjfResourceModified modified;     // resource modified callback (optional)
+  void* data;                       // opaque data pointer (resource invariant)
+};
+typedef struct mjpResourceProvider mjpResourceProvider;
+
+
+//---------------------------------- Plugins -------------------------------------------------------
+
+typedef enum mjtPluginCapabilityBit_ {
+  mjPLUGIN_ACTUATOR = 1<<0,       // actuator forces
+  mjPLUGIN_SENSOR   = 1<<1,       // sensor measurements
+  mjPLUGIN_PASSIVE  = 1<<2,       // passive forces
+  mjPLUGIN_SDF      = 1<<3,       // signed distance fields
+} mjtPluginCapabilityBit;
 
 struct mjpPlugin_ {
-  const char* name;    // globally unique name identifying the plugin
+  const char* name;               // globally unique name identifying the plugin
 
   int nattribute;                 // number of configuration attributes
   const char* const* attributes;  // name of configuration attributes
 
-  int type;            // bitfield of mjtPluginTypeBits specifying the plugin type
-  int needstage;       // an mjtStage enum value specifying the sensor computation stage
+  int capabilityflags;            // plugin capabilities: bitfield of mjtPluginCapabilityBit
+  int needstage;                  // sensor computation stage (mjtStage)
 
   // number of mjtNums needed to store the state of a plugin instance (required)
   int (*nstate)(const mjModel* m, int instance);
@@ -51,51 +99,73 @@ struct mjpPlugin_ {
   void (*copy)(mjData* dest, const mjModel* m, const mjData* src, int instance);
 
   // called when an mjData is being reset (required)
-  void (*reset)(const mjModel* m, mjData* d, int instance);
+  void (*reset)(const mjModel* m, mjtNum* plugin_state, void* plugin_data, int instance);
 
   // called when the plugin needs to update its outputs (required)
-  void (*compute)(const mjModel* m, mjData* d, int instance, int type);
+  void (*compute)(const mjModel* m, mjData* d, int instance, int capability_bit);
 
   // called when time integration occurs (optional)
   void (*advance)(const mjModel* m, mjData* d, int instance);
 
   // called by mjv_updateScene (optional)
-  void (*visualize)(const mjModel*m, mjData* d, mjvScene* scn, int instance);
+  void (*visualize)(const mjModel*m, mjData* d, const mjvOption* opt, mjvScene* scn, int instance);
+
+  // methods specific to actuators (optional)
+
+  // updates the actuator plugin's entries in act_dot
+  // called after native act_dot is computed and before the compute callback
+  void (*actuator_act_dot)(const mjModel* m, mjData* d, int instance);
+
+  // methods specific to signed distance fields (optional)
+
+  // signed distance from the surface
+  mjtNum (*sdf_distance)(const mjtNum point[3], const mjData* d, int instance);
+
+  // gradient of distance with respect to local coordinates
+  void (*sdf_gradient)(mjtNum gradient[3], const mjtNum point[3], const mjData* d, int instance);
+
+  // called during compilation for marching cubes
+  mjtNum (*sdf_staticdistance)(const mjtNum point[3], const mjtNum* attributes);
+
+  // convert attributes and provide defaults if not present
+  void (*sdf_attribute)(mjtNum attribute[], const char* name[], const char* value[]);
+
+  // bounding box of implicit surface
+  void (*sdf_aabb)(mjtNum aabb[6], const mjtNum* attributes);
 };
 typedef struct mjpPlugin_ mjpPlugin;
 
 #if defined(__has_attribute)
 
-#if __has_attribute(constructor)
-#define mjPLUGIN_DYNAMIC_LIBRARY_INIT \
-  __attribute__((constructor)) static void _mjplugin_init(void)
-#endif
+  #if __has_attribute(constructor)
+    #define mjPLUGIN_LIB_INIT __attribute__((constructor)) static void _mjplugin_init(void)
+  #endif  // __has_attribute(constructor)
 
 #elif defined(_MSC_VER)
 
-#ifndef mjDLLMAIN
-#define mjDLLMAIN DllMain
-#endif
+  #ifndef mjDLLMAIN
+    #define mjDLLMAIN DllMain
+  #endif
 
-#if !defined(mjEXTERNC)
-#if defined(__cplusplus)
-#define mjEXTERNC extern "C"
-#else
-#define mjEXTERNC
-#endif  // defined(__cplusplus)
-#endif  // !defined(mjEXTERNC)
+  #if !defined(mjEXTERNC)
+    #if defined(__cplusplus)
+      #define mjEXTERNC extern "C"
+    #else
+      #define mjEXTERNC
+    #endif  // defined(__cplusplus)
+  #endif  // !defined(mjEXTERNC)
 
-// NOLINTBEGIN(runtime/int)
-#define mjPLUGIN_DYNAMIC_LIBRARY_INIT                                                     \
-  static void _mjplugin_dllmain(void);                                                    \
-  mjEXTERNC int __stdcall mjDLLMAIN(void* hinst, unsigned long reason, void* reserved) {  \
-    if (reason == 1) {                                                                    \
-      _mjplugin_dllmain();                                                                \
-    }                                                                                     \
-    return 1;                                                                             \
-  }                                                                                       \
-  static void _mjplugin_dllmain(void)
-// NOLINTEND(runtime/int)
+  // NOLINTBEGIN(runtime/int)
+  #define mjPLUGIN_LIB_INIT                                                                 \
+    static void _mjplugin_dllmain(void);                                                    \
+    mjEXTERNC int __stdcall mjDLLMAIN(void* hinst, unsigned long reason, void* reserved) {  \
+      if (reason == 1) {                                                                    \
+        _mjplugin_dllmain();                                                                \
+      }                                                                                     \
+      return 1;                                                                             \
+    }                                                                                       \
+    static void _mjplugin_dllmain(void)
+  // NOLINTEND(runtime/int)
 
 #endif  // defined(_MSC_VER)
 

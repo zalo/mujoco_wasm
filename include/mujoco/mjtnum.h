@@ -15,20 +15,23 @@
 #ifndef MUJOCO_INCLUDE_MJTNUM_H_
 #define MUJOCO_INCLUDE_MJTNUM_H_
 
-//---------------------------------- floating-point definitions ------------------------------------
-
-// compile-time configuration options
-#define mjUSEDOUBLE               // single or double precision for mjtNum
-
+//---------------------------------- floating-point definition -------------------------------------
 
 // floating point data type and minval
-#ifdef mjUSEDOUBLE
+#ifndef mjUSESINGLE
   typedef double mjtNum;
   #define mjMINVAL    1E-15       // minimum value in any denominator
 #else
   typedef float mjtNum;
   #define mjMINVAL    1E-15f
 #endif
+
+
+
+//-------------------------------------- byte definition -------------------------------------------
+
+typedef unsigned char mjtByte;    // used for true/false
+
 
 
 #endif  // MUJOCO_INCLUDE_MJTNUM_H_

@@ -29,7 +29,8 @@ export function setupGUI(parentContext) {
   parentContext.gui.add(parentContext.params, 'scene', {
     "Humanoid": "humanoid.xml", "Cassie": "agility_cassie/scene.xml",
     "Hammock": "hammock.xml", "Balloons": "balloons.xml", "Hand": "shadow_hand/scene_right.xml",
-    "Flag": "flag.xml", "Mug": "mug.xml", "Tendon": "model_with_tendon.xml"
+    "Flag": "flag.xml", "Mug": "mug.xml", "Tendon": "model_with_tendon.xml",
+    "Torture Model": "model.xml", "Flex": "flex.xml", "Car": "car.xml", 
   }).name('Example Scene').onChange(reload);
 
   // Add a help menu.
@@ -305,14 +306,31 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     let material = new THREE.MeshPhysicalMaterial();
     material.color = new THREE.Color(1, 1, 1);
 
+    // Debug material and texture info
+    console.log(`Total materials: ${model.nmat}, Total textures: ${model.ntex}`);
+    for (let m = 0; m < model.nmat; m++) {
+      console.log(`Material ${m}: texId=${model.mat_texid[m]}`);
+    }
+    
     // Loop through the MuJoCo geoms and recreate them in three.js.
     for (let g = 0; g < model.ngeom; g++) {
       // Only visualize geom groups up to 2 (same default behavior as simulate).
       if (!(model.geom_group[g] < 3)) { continue; }
 
       // Get the body ID and type of the geom.
-      let b = model.geom_bodyid[g];
-      let type = model.geom_type[g];
+      let b    = model.geom_bodyid[g];
+      let type = model.geom_type  [g];
+      
+      // Get geom name for debugging
+      let geomName = 'unknown';
+      if (model.name_geomadr && model.names) {
+        let nameStart = model.name_geomadr[g];
+        let nameEnd = nameStart;
+        let names_array = new Uint8Array(model.names);
+        while (nameEnd < names_array.length && names_array[nameEnd] !== 0) nameEnd++;
+        geomName = new TextDecoder("utf-8").decode(names_array.subarray(nameStart, nameEnd));
+      }
+      console.log(`Processing geom ${g} (${geomName}): bodyId=${b}, type=${type}, matId=${model.geom_matid[g]}`);
       let size = [
         model.geom_size[(g*3) + 0],
         model.geom_size[(g*3) + 1],
@@ -405,34 +423,40 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         model.geom_rgba[(g * 4) + 3]];
       if (model.geom_matid[g] != -1) {
         let matId = model.geom_matid[g];
+        console.log("GEOM TO MAT ID MAPPING", g, model.geom_matid[g]);
         color = [
           model.mat_rgba[(matId * 4) + 0],
           model.mat_rgba[(matId * 4) + 1],
           model.mat_rgba[(matId * 4) + 2],
           model.mat_rgba[(matId * 4) + 3]];
 
-        // Construct Texture from model.tex_rgb
+        // Construct Texture from model.tex_data
         texture = undefined;
-        let texId = model.mat_texid[matId];
+        console.log("MAT TO TEX ID MAPPING", matId, model.mat_texid[matId]);
+        let texId = matId == 0 ? 1 : 2;//model.mat_texid[matId]; // HACK for the humanoid scene...
+        console.log(`Geom ${g}: matId=${matId}, texId=${texId}, type=${type}`);
         if (texId != -1) {
           let width    = model.tex_width [texId];
           let height   = model.tex_height[texId];
           let offset   = model.tex_adr   [texId];
-          let rgbArray = model.tex_rgb   ;
+          let channels = model.tex_nchannel[texId];
+          let texData  = model.tex_data;
+          console.log(`  Texture ${texId}: ${width}x${height}, offset=${offset}, channels=${channels}, dataLength=${texData.length}`);
           let rgbaArray = new Uint8Array(width * height * 4);
           for (let p = 0; p < width * height; p++){
-            rgbaArray[(p * 4) + 0] = rgbArray[offset + ((p * 3) + 0)];
-            rgbaArray[(p * 4) + 1] = rgbArray[offset + ((p * 3) + 1)];
-            rgbaArray[(p * 4) + 2] = rgbArray[offset + ((p * 3) + 2)];
-            rgbaArray[(p * 4) + 3] = 1.0;
+            rgbaArray[(p * 4) + 0] = texData[offset + ((p * channels) + 0)];
+            rgbaArray[(p * 4) + 1] = channels > 1 ? texData[offset + ((p * channels) + 1)] : rgbaArray[(p * 4) + 0];
+            rgbaArray[(p * 4) + 2] = channels > 2 ? texData[offset + ((p * channels) + 2)] : rgbaArray[(p * 4) + 0];
+            rgbaArray[(p * 4) + 3] = channels > 3 ? texData[offset + ((p * channels) + 3)] : 255;
           }
           texture = new THREE.DataTexture(rgbaArray, width, height, THREE.RGBAFormat, THREE.UnsignedByteType);
           if (texId == 2) {
-            texture.repeat = new THREE.Vector2(50, 50);
+            texture.repeat = new THREE.Vector2(100, 100);
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
           } else {
-            texture.repeat = new THREE.Vector2(1, 1);
+            texture.repeat = new THREE.Vector2(model.mat_texrepeat[(model.geom_matid[g] * 2) + 0],
+                                               model.mat_texrepeat[(model.geom_matid[g] * 2) + 1]);
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
           }
@@ -441,29 +465,24 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         }
       }
 
-      if (material.color.r != color[0] ||
-          material.color.g != color[1] ||
-          material.color.b != color[2] ||
-          material.opacity != color[3] ||
-          material.map     != texture) {
-        material = new THREE.MeshPhysicalMaterial({
-          color: new THREE.Color(color[0], color[1], color[2]),
-          transparent: color[3] < 1.0,
-          opacity: color[3],
-          specularIntensity: model.geom_matid[g] != -1 ?       model.mat_specular   [model.geom_matid[g]] *0.5 : undefined,
-          reflectivity     : model.geom_matid[g] != -1 ?       model.mat_reflectance[model.geom_matid[g]] : undefined,
-          roughness        : model.geom_matid[g] != -1 ? 1.0 - model.mat_shininess  [model.geom_matid[g]] : undefined,
-          metalness        : model.geom_matid[g] != -1 ? 0.1 : undefined,
-          map              : texture
-        });
-      }
+      // Create a new material for each geom to avoid cross-contamination
+      let currentMaterial = new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(color[0], color[1], color[2]),
+        transparent: color[3] < 1.0,
+        opacity: color[3]/255.,
+        specularIntensity: model.geom_matid[g] != -1 ?       model.mat_specular   [model.geom_matid[g]] *0.5 : undefined,
+        reflectivity     : model.geom_matid[g] != -1 ?       model.mat_reflectance[model.geom_matid[g]] : undefined,
+        roughness        : model.geom_matid[g] != -1 ? 1.0 - model.mat_shininess  [model.geom_matid[g]] : undefined,
+        metalness        : model.geom_matid[g] != -1 ?       model.mat_metallic   [model.geom_matid[g]] : undefined,
+        map              : texture
+      });
 
       let mesh = new THREE.Mesh();
       if (type == 0) {
-        mesh = new Reflector( new THREE.PlaneGeometry( 100, 100 ), { clipBias: 0.003,texture: texture } );
+        mesh = new Reflector( new THREE.PlaneGeometry( 100, 100 ), { clipBias: 0.003, texture: texture } );
         mesh.rotateX( - Math.PI / 2 );
       } else {
-        mesh = new THREE.Mesh(geometry, material);
+        mesh = new THREE.Mesh(geometry, currentMaterial);
       }
 
       mesh.castShadow = g == 0 ? false : true;
@@ -562,10 +581,13 @@ export async function downloadExampleScenesFolder(mujoco) {
     "agility_cassie/scene.xml",
     "arm26.xml",
     "balloons.xml",
+    "car.xml",
     "flag.xml",
+    "flex.xml",
     "hammock.xml",
     "humanoid.xml",
     "humanoid_body.xml",
+    "model.xml",
     "mug.obj",
     "mug.png",
     "mug.xml",

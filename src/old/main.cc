@@ -47,7 +47,7 @@ public:
   int nlight                () { return m->nlight                ; } // number of lights
   int nmesh                 () { return m->nmesh                 ; } // number of meshes
   int nmeshvert             () { return m->nmeshvert             ; } // number of vertices in all meshes
-  int nmeshtexvert          () { return m->nmeshtexvert          ; } // number of vertices with texcoords in all meshes
+  //int nmeshtexvert          () { return m->nmeshtexvert          ; } // number of vertices with texcoords in all meshes
   int nmeshface             () { return m->nmeshface             ; } // number of triangular faces in all meshes
   int nmeshgraph            () { return m->nmeshgraph            ; } // number of ints in mesh auxiliary data
   int nskin                 () { return m->nskin                 ; } // number of skins
@@ -183,7 +183,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("nlight"        , &Model::nlight        )
       .function("nmesh"         , &Model::nmesh         )
       .function("nmeshvert"     , &Model::nmeshvert     )
-      .function("nmeshtexvert"  , &Model::nmeshtexvert  )
+      //.function("nmeshtexvert"  , &Model::nmeshtexvert  )
       .function("nmeshface"     , &Model::nmeshface     )
       .function("nmeshgraph"    , &Model::nmeshgraph    )
       .function("nskin"         , &Model::nskin         )
@@ -227,7 +227,7 @@ EMSCRIPTEN_BINDINGS(mujoco_wasm) {
       .function("nemax"         , &Model::nemax         )
       .function("njmax"         , &Model::njmax         )
       .function("nconmax"       , &Model::nconmax       )
-      .function("nstack"        , &Model::nstack        )
+      //.function("nstack"        , &Model::nstack        )
       .function("nuserdata"     , &Model::nuserdata     )
       .function("nsensordata"   , &Model::nsensordata   )
       .function("npluginstate"  , &Model::npluginstate  )
