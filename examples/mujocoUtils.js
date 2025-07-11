@@ -433,7 +433,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         // Construct Texture from model.tex_data
         texture = undefined;
         console.log("MAT TO TEX ID MAPPING", matId, model.mat_texid[matId]);
-        let texId = matId == 0 ? 1 : 2;//model.mat_texid[matId]; // HACK for the humanoid scene...
+        let texId = model.mat_texid[matId];
         console.log(`Geom ${g}: matId=${matId}, texId=${texId}, type=${type}`);
         if (texId != -1) {
           let width    = model.tex_width [texId];
@@ -470,9 +470,9 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         color: new THREE.Color(color[0], color[1], color[2]),
         transparent: color[3] < 1.0,
         opacity: color[3]/255.,
-        specularIntensity: model.geom_matid[g] != -1 ?       model.mat_specular   [model.geom_matid[g]] *0.5 : undefined,
+        specularIntensity: model.geom_matid[g] != -1 ?       model.mat_specular   [model.geom_matid[g]] : undefined,
         reflectivity     : model.geom_matid[g] != -1 ?       model.mat_reflectance[model.geom_matid[g]] : undefined,
-        roughness        : model.geom_matid[g] != -1 ? 1.0 - model.mat_shininess  [model.geom_matid[g]] : undefined,
+        roughness        : model.geom_matid[g] != -1 ? 1.0 - model.mat_shininess  [model.geom_matid[g]] * -1.0 : undefined,
         metalness        : model.geom_matid[g] != -1 ?       model.mat_metallic   [model.geom_matid[g]] : undefined,
         map              : texture
       });
@@ -513,10 +513,14 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     // Parse lights.
     for (let l = 0; l < model.nlight; l++) {
       let light = new THREE.SpotLight();
-      if (model.light_directional[l]) {
-        light = new THREE.DirectionalLight();
-      } else {
+      if (model.light_type[l] == 0) {
         light = new THREE.SpotLight();
+      } else if (model.light_type[l] == 1) {
+        light = new THREE.DirectionalLight();
+      } else if (model.light_type[l] == 2) {
+        light = new THREE.PointLight();
+      }else if (model.light_type[l] == 3) {
+        light = new THREE.HemisphereLight();
       }
       light.decay = model.light_attenuation[l] * 100;
       light.penumbra = 0.5;
@@ -524,7 +528,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
 
       light.shadow.mapSize.width = 1024; // default
       light.shadow.mapSize.height = 1024; // default
-      light.shadow.camera.near = 1; // default
+      light.shadow.camera.near = 0.1; // default
       light.shadow.camera.far = 10; // default
       //bodies[model.light_bodyid()].add(light);
       if (bodies[0]) {
