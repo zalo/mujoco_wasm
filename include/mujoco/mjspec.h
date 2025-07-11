@@ -205,7 +205,6 @@ typedef struct mjsPlugin_ {        // plugin specification
 
 typedef struct mjsBody_ {          // body specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjString* childclass;            // childclass name
 
   // body frame
@@ -233,7 +232,6 @@ typedef struct mjsBody_ {          // body specification
 
 typedef struct mjsFrame_ {         // frame specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjString* childclass;            // childclass name
   double pos[3];                   // position
   double quat[4];                  // orientation
@@ -244,7 +242,6 @@ typedef struct mjsFrame_ {         // frame specification
 
 typedef struct mjsJoint_ {         // joint specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjtJoint type;                   // joint type
 
   // kinematics
@@ -284,7 +281,6 @@ typedef struct mjsJoint_ {         // joint specification
 
 typedef struct mjsGeom_ {          // geom specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjtGeom type;                    // geom type
 
   // frame, size
@@ -332,7 +328,6 @@ typedef struct mjsGeom_ {          // geom specification
 
 typedef struct mjsSite_ {          // site specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
 
   // frame, size
   double pos[3];                   // position
@@ -355,7 +350,6 @@ typedef struct mjsSite_ {          // site specification
 
 typedef struct mjsCamera_ {        // camera specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
 
   // extrinsics
   double pos[3];                   // position
@@ -384,7 +378,6 @@ typedef struct mjsCamera_ {        // camera specification
 
 typedef struct mjsLight_ {         // light specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
 
   // frame
   double pos[3];                   // position
@@ -394,9 +387,12 @@ typedef struct mjsLight_ {         // light specification
 
   // intrinsics
   mjtByte active;                  // is light active
-  mjtByte directional;             // is light directional or spot
+  mjtLightType type;               // type of light
+  mjString* texture;               // texture name for image lights
   mjtByte castshadow;              // does light cast shadows
-  double bulbradius;               // bulb radius, for soft shadows
+  float bulbradius;                // bulb radius, for soft shadows
+  float intensity;                 // intensity, in candelas
+  float range;                     // range of effectiveness
   float attenuation[3];            // OpenGL attenuation (quadratic model)
   float cutoff;                    // OpenGL cutoff
   float exponent;                  // OpenGL exponent
@@ -411,7 +407,6 @@ typedef struct mjsLight_ {         // light specification
 
 typedef struct mjsFlex_ {          // flex specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
 
   // contact properties
   int contype;                     // contact type
@@ -430,7 +425,8 @@ typedef struct mjsFlex_ {          // flex specification
   double radius;                   // radius around primitive element
   mjtByte internal;                // enable internal collisions
   mjtByte flatskin;                // render flex skin with flat shading
-  int selfcollide;                 // mode for flex self colllision
+  int selfcollide;                 // mode for flex self collision
+  int vertcollide;                 // mode for vertex collision
   int activelayers;                // number of active element layers in 3D
   int group;                       // group for visualizatioh
   double edgestiffness;            // edge stiffness
@@ -441,6 +437,7 @@ typedef struct mjsFlex_ {          // flex specification
   double poisson;                  // Poisson's ratio
   double damping;                  // Rayleigh's damping
   double thickness;                // thickness (2D only)
+  int elastic2d;                   // 2D passive forces; 0: none, 1: bending, 2: stretching, 3: both
 
   // mesh properties
   mjStringVec* nodebody;           // node body names
@@ -458,7 +455,6 @@ typedef struct mjsFlex_ {          // flex specification
 
 typedef struct mjsMesh_ {          // mesh specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjString* content_type;          // content type of file
   mjString* file;                  // mesh file
   double refpos[3];                // reference position
@@ -479,7 +475,6 @@ typedef struct mjsMesh_ {          // mesh specification
 
 typedef struct mjsHField_ {        // height field specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjString* content_type;          // content type of file
   mjString* file;                  // file: (nrow, ncol, [elevation data])
   double size[4];                  // hfield size (ignore referencing geom size)
@@ -493,7 +488,6 @@ typedef struct mjsHField_ {        // height field specification
 
 typedef struct mjsSkin_ {          // skin specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjString* file;                  // skin file
   mjString* material;              // name of material used for rendering
   float rgba[4];                   // rgba when material is omitted
@@ -519,8 +513,8 @@ typedef struct mjsSkin_ {          // skin specification
 
 typedef struct mjsTexture_ {       // texture specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjtTexture type;                 // texture type
+  mjtColorSpace colorspace;        // colorspace
 
   // method 1: builtin
   int builtin;                     // builtin type (mjtBuiltin)
@@ -556,7 +550,6 @@ typedef struct mjsTexture_ {       // texture specification
 
 typedef struct mjsMaterial_ {      // material specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjStringVec* textures;           // names of textures (empty: none)
   mjtByte texuniform;              // make texture cube uniform
   float texrepeat[2];              // texture repetition for 2D mapping
@@ -573,7 +566,6 @@ typedef struct mjsMaterial_ {      // material specification
 
 typedef struct mjsPair_ {          // pair specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjString* geomname1;             // name of geom 1
   mjString* geomname2;             // name of geom 2
 
@@ -591,7 +583,6 @@ typedef struct mjsPair_ {          // pair specification
 
 typedef struct mjsExclude_ {       // exclude specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjString* bodyname1;             // name of geom 1
   mjString* bodyname2;             // name of geom 2
   mjString* info;                  // message appended to errors
@@ -600,7 +591,6 @@ typedef struct mjsExclude_ {       // exclude specification
 
 typedef struct mjsEquality_ {      // equality specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjtEq type;                      // constraint type
   double data[mjNEQDATA];          // type-dependent data
   mjtByte active;                  // is equality initially active
@@ -615,7 +605,6 @@ typedef struct mjsEquality_ {      // equality specification
 
 typedef struct mjsTendon_ {        // tendon specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
 
   // stiffness, damping, friction, armature
   double stiffness;                // stiffness coefficient
@@ -655,7 +644,6 @@ typedef struct mjsWrap_ {          // wrapping object specification
 
 typedef struct mjsActuator_ {      // actuator specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
 
   // gain, bias
   mjtGain gaintype;                // gain type
@@ -697,7 +685,6 @@ typedef struct mjsActuator_ {      // actuator specification
 
 typedef struct mjsSensor_ {        // sensor specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
 
   // sensor definition
   mjtSensor type;                  // type of sensor
@@ -705,6 +692,7 @@ typedef struct mjsSensor_ {        // sensor specification
   mjString* objname;               // name of sensorized object
   mjtObj reftype;                  // type of referenced object
   mjString* refname;               // name of referenced object
+  int intprm[mjNSENS];             // integer parameters
 
   // user-defined sensors
   mjtDataType datatype;            // data type for sensor measurement
@@ -724,7 +712,6 @@ typedef struct mjsSensor_ {        // sensor specification
 
 typedef struct mjsNumeric_ {       // custom numeric field specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjDoubleVec* data;               // initialization data
   int size;                        // array size, can be bigger than data size
   mjString* info;                  // message appended to compiler errors
@@ -733,7 +720,6 @@ typedef struct mjsNumeric_ {       // custom numeric field specification
 
 typedef struct mjsText_ {          // custom text specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjString* data;                  // text string
   mjString* info;                  // message appended to compiler errors
 } mjsText;
@@ -741,7 +727,6 @@ typedef struct mjsText_ {          // custom text specification
 
 typedef struct mjsTuple_ {         // tuple specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   mjIntVec* objtype;               // object types
   mjStringVec* objname;            // object names
   mjDoubleVec* objprm;             // object parameters
@@ -751,7 +736,6 @@ typedef struct mjsTuple_ {         // tuple specification
 
 typedef struct mjsKey_ {           // keyframe specification
   mjsElement* element;             // element type
-  mjString* name;                  // name
   double time;                     // time
   mjDoubleVec* qpos;               // qpos
   mjDoubleVec* qvel;               // qvel
@@ -765,7 +749,6 @@ typedef struct mjsKey_ {           // keyframe specification
 
 typedef struct mjsDefault_ {       // default specification
   mjsElement* element;             // element type
-  mjString* name;                  // class name
   mjsJoint* joint;                 // joint defaults
   mjsGeom* geom;                   // geom defaults
   mjsSite* site;                   // site defaults

@@ -399,6 +399,17 @@ export enum mjtCamLight {
     /** pos fixed in body, rot tracks target subtree com */
     mjCAMLIGHT_TARGETBODYCOM ,
 }
+/**  type of light                           */
+export enum mjtLightType {
+    /** spot                                     */
+    mjLIGHT_SPOT             ,
+    /** directional                              */
+    mjLIGHT_DIRECTIONAL      ,
+    /** point                                    */
+    mjLIGHT_POINT            ,
+    /** image-based                              */
+    mjLIGHT_IMAGE            ,
+}
 /**  type of texture                         */
 export enum mjtTexture {
     /** 2d texture, suitable for planes and hfields */
@@ -430,6 +441,15 @@ export enum mjtTextureRole {
     mjTEXROLE_RGBA           ,
     /** occlusion, roughness, metallic           */
     mjTEXROLE_ORM            ,
+}
+/**  type of color space encoding            */
+export enum mjtColorSpace {
+    /** attempts to autodetect color space, defaults to linear */
+    mjCOLORSPACE_AUTO        ,
+    /** linear color space                       */
+    mjCOLORSPACE_LINEAR      ,
+    /** standard RGB color space                 */
+    mjCOLORSPACE_SRGB        ,
 }
 /**  integrator mode                         */
 export enum mjtIntegrator {
@@ -724,6 +744,8 @@ export enum mjtSensor {
     mjSENS_SUBTREELINVEL     ,
     /** 3D angular momentum of subtree           */
     mjSENS_SUBTREEANGMOM     ,
+    /** 1 if object is inside a site, 0 otherwise */
+    mjSENS_INSIDESITE        ,
     /** signed distance between two geoms        */
     mjSENS_GEOMDIST          ,
     /** normal direction between two geoms       */
@@ -800,6 +822,17 @@ export enum mjtFlexSelf {
     /** choose between BVH and SAP automatically */
     mjFLEXSELF_AUTO          ,
 }
+/**  signed distance function (SDF) type     */
+export enum mjtSDFType {
+    /** single SDF                               */
+    mjSDFTYPE_SINGLE         ,
+    /** max(A, B)                                */
+    mjSDFTYPE_INTERSECTION   ,
+    /** A - B                                    */
+    mjSDFTYPE_MIDSURFACE     ,
+    /** A + B + abs(max(A, B))                   */
+    mjSDFTYPE_COLLISION      ,
+}
 
 export interface Model {
   new (filename : string) : Model;
@@ -825,6 +858,8 @@ export interface Model {
   nbvhstatic            :       number;
   /** number of dynamic bounding volumes (aabb stored in mjData)*/
   nbvhdynamic           :       number;
+  /** number of total octree cells in all meshes*/
+  noct                  :       number;
   /** number of joints*/
   njnt                  :       number;
   /** number of geoms*/
@@ -1047,6 +1082,14 @@ export interface Model {
   bvh_nodeid            :   Int32Array;
   /** local bounding box (center, size)        (nbvhstatic x 6)*/
   bvh_aabb              : Float64Array;
+  /** depth in the octree                      (noct x 1)*/
+  oct_depth             :   Int32Array;
+  /** children of octree node                  (noct x 8)*/
+  oct_child             :   Int32Array;
+  /** octree node bounding box (center, size)  (noct x 6)*/
+  oct_aabb              : Float64Array;
+  /** octree interpolation coefficients        (noct x 8)*/
+  oct_coeff             : Float64Array;
   /** type of joint (mjtJoint)                 (njnt x 1)*/
   jnt_type              :   Int32Array;
   /** start addr in 'qpos' for joint's data    (njnt x 1)*/
@@ -1213,12 +1256,18 @@ export interface Model {
   light_bodyid          :   Int32Array;
   /** id of targeted body; -1: none            (nlight x 1)*/
   light_targetbodyid    :   Int32Array;
-  /** directional light                        (nlight x 1)*/
-  light_directional     :   Uint8Array;
+  /** spot, directional, etc. (mjtLightType)   (nlight x 1)*/
+  light_type            :   Int32Array;
+  /** texture id for image lights              (nlight x 1)*/
+  light_texid           :   Int32Array;
   /** does light cast shadows                  (nlight x 1)*/
   light_castshadow      :   Uint8Array;
   /** light radius for soft shadows            (nlight x 1)*/
   light_bulbradius      : Float32Array;
+  /** intensity, in candela                    (nlight x 1)*/
+  light_intensity       : Float32Array;
+  /** range of effectiveness                   (nlight x 1)*/
+  light_range           : Float32Array;
   /** is light on                              (nlight x 1)*/
   light_active          :   Uint8Array;
   /** position rel. to body frame              (nlight x 3)*/
@@ -1313,6 +1362,8 @@ export interface Model {
   flex_vertbodyid       :   Int32Array;
   /** edge vertex ids (2 per edge)             (nflexedge x 2)*/
   flex_edge             :   Int32Array;
+  /** adjacent vertex ids (dim=2 only)         (nflexedge x 2)*/
+  flex_edgeflap         :   Int32Array;
   /** element vertex ids (dim+1 per elem)      (nflexelemdata x 1)*/
   flex_elem             :   Int32Array;
   /** element texture coordinates (dim+1)      (nflexelemdata x 1)*/
@@ -1341,6 +1392,8 @@ export interface Model {
   flex_radius           : Float64Array;
   /** finite element stiffness matrix          (nflexelem x 21)*/
   flex_stiffness        : Float64Array;
+  /** bending stiffness                        (nflexedge x 16)*/
+  flex_bending          : Float64Array;
   /** Rayleigh's damping coefficient           (nflex x 1)*/
   flex_damping          : Float64Array;
   /** edge stiffness                           (nflex x 1)*/
@@ -1385,6 +1438,10 @@ export interface Model {
   mesh_bvhadr           :   Int32Array;
   /** number of bvh                            (nmesh x 1)*/
   mesh_bvhnum           :   Int32Array;
+  /** address of octree root                   (nmesh x 1)*/
+  mesh_octadr           :   Int32Array;
+  /** number of octree nodes                   (nmesh x 1)*/
+  mesh_octnum           :   Int32Array;
   /** graph data address; -1: no graph         (nmesh x 1)*/
   mesh_graphadr         :   Int32Array;
   /** scaling applied to asset vertices        (nmesh x 3)*/
@@ -1485,6 +1542,8 @@ export interface Model {
   hfield_pathadr        :   Int32Array;
   /** texture type (mjtTexture)                (ntex x 1)*/
   tex_type              :   Int32Array;
+  /** texture colorspace (mjtColorSpace)       (ntex x 1)*/
+  tex_colorspace        :   Int32Array;
   /** number of rows in texture image          (ntex x 1)*/
   tex_height            :   Int32Array;
   /** number of columns in texture image       (ntex x 1)*/
@@ -1671,6 +1730,8 @@ export interface Model {
   sensor_reftype        :   Int32Array;
   /** id of reference frame; -1: global frame  (nsensor x 1)*/
   sensor_refid          :   Int32Array;
+  /** sensor parameters                        (nsensor x mjNSENS)*/
+  sensor_intprm         :   Int32Array;
   /** number of scalar outputs                 (nsensor x 1)*/
   sensor_dim            :   Int32Array;
   /** address in sensor array                  (nsensor x 1)*/
@@ -1919,9 +1980,11 @@ export interface Simulation {
   actuator_moment       : Float64Array;
   /** com-based composite inertia and mass             (nbody x 10)*/
   crb                   : Float64Array;
-  /** total inertia (sparse)                           (nM x 1)*/
+  /** inertia (sparse)                                 (nM x 1)*/
   qM                    : Float64Array;
-  /** L'*D*L factorization of M (sparse)               (nM x 1)*/
+  /** inertia (sparse)                                 (nM x 1)*/
+  M                     : Float64Array;
+  /** L'*D*L factorization of M (sparse)               (nC x 1)*/
   qLD                   : Float64Array;
   /** 1/diag(D)                                        (nv x 1)*/
   qLDiagInv             : Float64Array;
@@ -1955,7 +2018,7 @@ export interface Simulation {
   subtree_linvel        : Float64Array;
   /** angular momentum about subtree com               (nbody x 3)*/
   subtree_angmom        : Float64Array;
-  /** L'*D*L factorization of modified M               (nM x 1)*/
+  /** L'*D*L factorization of modified M               (nC x 1)*/
   qH                    : Float64Array;
   /** 1/diag(D) of modified M                          (nv x 1)*/
   qHDiagInv             : Float64Array;
@@ -1965,33 +2028,25 @@ export interface Simulation {
   B_rowadr              :   Int32Array;
   /** body-dof: column indices of non-zeros            (nB x 1)*/
   B_colind              :   Int32Array;
-  /** inertia: non-zeros in each row                   (nv x 1)*/
+  /** reduced inertia: non-zeros in each row           (nv x 1)*/
   M_rownnz              :   Int32Array;
-  /** inertia: address of each row in M_colind         (nv x 1)*/
+  /** reduced inertia: address of each row in M_colind (nv x 1)*/
   M_rowadr              :   Int32Array;
-  /** inertia: column indices of non-zeros             (nM x 1)*/
+  /** reduced inertia: column indices of non-zeros     (nC x 1)*/
   M_colind              :   Int32Array;
-  /** index mapping from M (legacy) to M (CSR)         (nM x 1)*/
+  /** index mapping from qM to M                       (nC x 1)*/
   mapM2M                :   Int32Array;
-  /** reduced dof-dof: non-zeros in each row           (nv x 1)*/
-  C_rownnz              :   Int32Array;
-  /** reduced dof-dof: address of each row in C_colind (nv x 1)*/
-  C_rowadr              :   Int32Array;
-  /** reduced dof-dof: column indices of non-zeros     (nC x 1)*/
-  C_colind              :   Int32Array;
-  /** index mapping from M to C                        (nC x 1)*/
-  mapM2C                :   Int32Array;
-  /** dof-dof: non-zeros in each row                   (nv x 1)*/
+  /** full inertia: non-zeros in each row              (nv x 1)*/
   D_rownnz              :   Int32Array;
-  /** dof-dof: address of each row in D_colind         (nv x 1)*/
+  /** full inertia: address of each row in D_colind    (nv x 1)*/
   D_rowadr              :   Int32Array;
-  /** dof-dof: index of diagonal element               (nv x 1)*/
+  /** full inertia: index of diagonal element          (nv x 1)*/
   D_diag                :   Int32Array;
-  /** dof-dof: column indices of non-zeros             (nD x 1)*/
+  /** full inertia: column indices of non-zeros        (nD x 1)*/
   D_colind              :   Int32Array;
-  /** index mapping from M to D                        (nD x 1)*/
+  /** index mapping from qM to D                       (nD x 1)*/
   mapM2D                :   Int32Array;
-  /** index mapping from D to M                        (nM x 1)*/
+  /** index mapping from D to qM                       (nM x 1)*/
   mapD2M                :   Int32Array;
   /** d (passive + actuator - bias) / d qvel           (nD x 1)*/
   qDeriv                : Float64Array;
@@ -2109,6 +2164,8 @@ export interface Simulation {
   transmission          (): void;
   /** Run composite rigid body inertia algorithm (CRB).*/
   crbCalculate          (): void;
+  /** Make inertia matrix.*/
+  makeM                 (): void;
   /** Compute sparse L'*D*L factorizaton of inertia matrix.*/
   factorM               (): void;
   /** Solve linear system M * x = y using factorization:  x = inv(L'*D*L)*y    [Only works with MuJoCo Allocated Arrays!]*/
