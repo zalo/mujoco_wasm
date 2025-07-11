@@ -51,7 +51,7 @@ export class MuJoCoDemo {
     this.scene.add( this.ambientLight );
 
     this.renderer = new THREE.WebGLRenderer( { antialias: true } );
-    this.renderer.setPixelRatio( window.devicePixelRatio );
+    this.renderer.setPixelRatio(1.0);////window.devicePixelRatio );
     this.renderer.setSize( window.innerWidth, window.innerHeight );
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
