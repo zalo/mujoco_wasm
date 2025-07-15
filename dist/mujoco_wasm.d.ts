@@ -752,6 +752,8 @@ export enum mjtSensor {
     mjSENS_GEOMNORMAL        ,
     /** segment between two geoms                */
     mjSENS_GEOMFROMTO        ,
+    /** contacts which occurred during the simulation */
+    mjSENS_CONTACT           ,
     /** potential energy                         */
     mjSENS_E_POTENTIAL       ,
     /** kinetic energy                           */
@@ -784,6 +786,25 @@ export enum mjtDataType {
     mjDATATYPE_AXIS          ,
     /** unit quaternion                          */
     mjDATATYPE_QUATERNION    ,
+}
+/**  data fields returned by contact sensors */
+export enum mjtConDataField {
+    /** whether a contact was found              */
+    mjCONDATA_FOUND          ,
+    /** contact force                            */
+    mjCONDATA_FORCE          ,
+    /** contact torque                           */
+    mjCONDATA_TORQUE         ,
+    /** contact penetration distance             */
+    mjCONDATA_DIST           ,
+    /** contact position                         */
+    mjCONDATA_POS            ,
+    /** contact frame normal                     */
+    mjCONDATA_NORMAL         ,
+    /** contact frame first tangent              */
+    mjCONDATA_TANGENT        ,
+    /** number of contact sensor data fields     */
+    mjNCONDATA               ,
 }
 /**  frame alignment of bodies with their children */
 export enum mjtSameFrame {
