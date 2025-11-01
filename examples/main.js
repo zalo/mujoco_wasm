@@ -23,6 +23,12 @@ export class MuJoCoDemo {
     this.model = mujoco.MjModel.loadFromXML("/working/" + initialScene);
     this.data  = new mujoco.MjData(this.model);
 
+    /** @type {mujoco.MjvScene} */
+    this.mjvScene = new mujoco.MjvScene(this.model, 2 ** 15);
+    this.mjvOption = new mujoco.MjvOption();
+    this.mjvPerturb = new mujoco.MjvPerturb();
+    this.mjvCamera = new mujoco.MjvCamera();
+
     // Define Random State Variables
     this.params = { scene: initialScene, paused: false, help: false, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0 };
     this.mujoco_time = 0.0;
