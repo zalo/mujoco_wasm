@@ -16,38 +16,16 @@
 
 ## The Power of MuJoCo in your Browser.
 
-Load and Run MuJoCo 3.3.2 Models using JavaScript and WebAssembly.
-
-This repo is a fork of @stillonearth 's starter repository, adding tons of functionality and a comprehensive example scene.
+Load and Run MuJoCo 3.3.8.X Models using JavaScript and WebAssembly.
 
 ### [See the Live Demo Here](https://zalo.github.io/mujoco_wasm/)
 
 ### [See a more Advanced Example Here](https://kzakka.com/robopianist/)
 
-## Building
-
-**1. Install emscripten**
-
-**2. Build the mujoco_wasm Binary**
-
-On Linux, use:
-```bash
-mkdir build
-cd build
-emcmake cmake ..
-make
-```
-
-On Windows, run `build_windows.bat`.
-
-*3. (Optional) Update MuJoCo libs*
-
-Build MuJoCo libs with wasm target and place to lib. Currently v3.3.2 included.
-
 ## JavaScript API
 
 ```javascript
-import load_mujoco from "./mujoco_wasm.js";
+import load_mujoco from "./dist/mujoco_wasm.js";
 
 // Load the MuJoCo Module
 const mujoco = await load_mujoco();
@@ -57,16 +35,33 @@ mujoco.FS.mkdir('/working');
 mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
 mujoco.FS.writeFile("/working/humanoid.xml", await (await fetch("./examples/scenes/humanoid.xml")).text());
 
-// Load in the state from XML
-let model       = new mujoco.Model("/working/humanoid.xml");
-let state       = new mujoco.State(model);
-let simulation  = new mujoco.Simulation(model, state);
+// Load model and create data
+let model = mujoco.MjModel.loadFromXML("/working/humanoid.xml");
+let data  = new mujoco.MjData(model);
+
+// Access model properties directly
+let timestep = model.opt.timestep;
+let nbody = model.nbody;
+
+// Access data buffers (typed arrays)
+let qpos = data.qpos;  // Joint positions
+let qvel = data.qvel;  // Joint velocities
+let ctrl = data.ctrl;  // Control inputs
+let xpos = data.xpos;  // Body positions
+
+// Step the simulation
+mujoco.mj_step(model, data);
+
+// Run forward kinematics
+mujoco.mj_forward(model, data);
+
+// Reset simulation
+mujoco.mj_resetData(model, data);
+
+// Apply forces (force, torque, point, body, qfrc_target)
+mujoco.mj_applyFT(model, data, [fx, fy, fz], [tx, ty, tz], [px, py, pz], bodyId, data.qfrc_applied);
+
+// Clean up
+data.delete();
+model.delete();
 ```
-
-Typescript definitions are available.
-
-## Work In Progress Disclaimer
-
-So far, most mjModel and mjData state variables and functions (that do not require custom structs) are exposed.
-
-At some point, I'd like to de-opinionate the binding and make it match the original MuJoCo API better.
