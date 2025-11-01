@@ -335,9 +335,12 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
 
       // Get size from mjvGeom
       let size = [
-        mjvGeom.size[0],
-        mjvGeom.size[1],
-        mjvGeom.size[2]
+        //mjvGeom.size[0], // Why aren't these valid?
+        //mjvGeom.size[1],
+        //mjvGeom.size[2]
+        model.geom_size[(g*3) + 0],
+        model.geom_size[(g*3) + 1],
+        model.geom_size[(g*3) + 2]
       ];
 
       // Create the body if it doesn't exist.
