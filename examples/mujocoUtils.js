@@ -5,11 +5,11 @@ import { MuJoCoDemo } from './main.js';
 export async function reloadFunc() {
   // Delete the old scene and load the new scene
   this.scene.remove(this.scene.getObjectByName("MuJoCo Root"));
-  [this.model, this.state, this.simulation, this.bodies, this.lights] =
+  [this.model, this.data, this.bodies, this.lights] =
     await loadSceneFromURL(this.mujoco, this.params.scene, this);
-  this.simulation.forward();
+  this.mujoco.mj_forward(this.model, this.data);
   for (let i = 0; i < this.updateGUICallbacks.length; i++) {
-    this.updateGUICallbacks[i](this.model, this.simulation, this.params);
+    this.updateGUICallbacks[i](this.model, this.data, this.params);
   }
 }
 
@@ -18,7 +18,7 @@ export function setupGUI(parentContext) {
 
   // Make sure we reset the camera when the scene is changed or reloaded.
   parentContext.updateGUICallbacks.length = 0;
-  parentContext.updateGUICallbacks.push((model, simulation, params) => {
+  parentContext.updateGUICallbacks.push((model, data, params) => {
     // TODO: Use free camera parameters from MuJoCo
     parentContext.camera.position.set(2.0, 1.7, 1.7);
     parentContext.controls.target.set(0, 0.7, 0);
@@ -178,8 +178,8 @@ export function setupGUI(parentContext) {
   //  When pressed, resets the simulation to the initial state.
   //  Can also be triggered by pressing backspace.
   const resetSimulation = () => {
-    parentContext.simulation.resetData();
-    parentContext.simulation.forward();
+    parentContext.mujoco.mj_resetData(parentContext.model, parentContext.data);
+    parentContext.mujoco.mj_forward(parentContext.model, parentContext.data);
   };
   simulationFolder.add({reset: () => { resetSimulation(); }}, 'reset').name('Reset');
   document.addEventListener('keydown', (event) => {
@@ -192,9 +192,9 @@ export function setupGUI(parentContext) {
   let keyframeGUI = simulationFolder.add(parentContext.params, "keyframeNumber", 0, nkeys - 1, 1).name('Load Keyframe').listen();
   keyframeGUI.onChange((value) => {
     if (value < parentContext.model.nkey) {
-      parentContext.simulation.qpos.set(parentContext.model.key_qpos.slice(
+      parentContext.data.qpos.set(parentContext.model.key_qpos.slice(
         value * parentContext.model.nq, (value + 1) * parentContext.model.nq)); }});
-  parentContext.updateGUICallbacks.push((model, simulation, params) => {
+  parentContext.updateGUICallbacks.push((model, data, params) => {
     let nkeys = parentContext.model.nkey;
     console.log("new model loaded. has " + nkeys + " keyframes.");
     if (nkeys > 0) {
@@ -216,7 +216,7 @@ export function setupGUI(parentContext) {
 
   // Add actuator sliders.
   let actuatorFolder = simulationFolder.addFolder("Actuators");
-  const addActuators = (model, simulation, params) => {
+  const addActuators = (model, data, params) => {
     let act_range = model.actuator_ctrlrange;
     let actuatorGUIs = [];
     for (let i = 0; i < model.nu; i++) {
@@ -229,17 +229,17 @@ export function setupGUI(parentContext) {
       let actuatorGUI = actuatorFolder.add(parentContext.params, name, act_range[2 * i], act_range[2 * i + 1], 0.01).name(name).listen();
       actuatorGUIs.push(actuatorGUI);
       actuatorGUI.onChange((value) => {
-        simulation.ctrl[i] = value;
+        data.ctrl[i] = value;
       });
     }
     return actuatorGUIs;
   };
-  let actuatorGUIs = addActuators(parentContext.model, parentContext.simulation, parentContext.params);
-  parentContext.updateGUICallbacks.push((model, simulation, params) => {
+  let actuatorGUIs = addActuators(parentContext.model, parentContext.data, parentContext.params);
+  parentContext.updateGUICallbacks.push((model, data, params) => {
     for (let i = 0; i < actuatorGUIs.length; i++) {
       actuatorGUIs[i].destroy();
     }
-    actuatorGUIs = addActuators(model, simulation, parentContext.params);
+    actuatorGUIs = addActuators(model, data, parentContext.params);
   });
   actuatorFolder.close();
 
@@ -267,22 +267,19 @@ export function setupGUI(parentContext) {
  * @param {MuJoCoDemo} parent The three.js Scene Object to add the MuJoCo model elements to
  */
 export async function loadSceneFromURL(mujoco, filename, parent) {
-    // Free the old simulation.
-    if (parent.simulation != null) {
-      parent.simulation.free();
-      parent.model      = null;
-      parent.state      = null;
-      parent.simulation = null;
+    // Free the old data.
+    if (parent.data != null) {
+      parent.data.delete();
+      parent.model = null;
+      parent.data  = null;
     }
 
     // Load in the state from XML.
-    parent.model       = mujoco.Model.load_from_xml("/working/"+filename);
-    parent.state       = new mujoco.State(parent.model);
-    parent.simulation  = new mujoco.Simulation(parent.model, parent.state);
+    parent.model = mujoco.MjModel.loadFromXML("/working/"+filename);
+    parent.data  = new mujoco.MjData(parent.model);
 
     let model = parent.model;
-    let state = parent.state;
-    let simulation = parent.simulation;
+    let data = parent.data;
 
     // Decode the null-terminated string names.
     let textDecoder = new TextDecoder("utf-8");
@@ -558,7 +555,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
   
     parent.mujocoRoot = mujocoRoot;
 
-    return [model, state, simulation, bodies, lights]
+    return [model, data, bodies, lights]
 }
 
 /** Downloads the scenes/examples folder to MuJoCo's virtual filesystem
