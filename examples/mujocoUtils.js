@@ -433,7 +433,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
           }
           texture = new THREE.DataTexture(rgbaArray, width, height, THREE.RGBAFormat, THREE.UnsignedByteType);
           if (texId == 2) {
-            texture.repeat = new THREE.Vector2(100, 100);
+            texture.repeat = new THREE.Vector2(50, 50);
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
           } else {
@@ -454,8 +454,8 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         opacity: color[3]/255.,
         specularIntensity: model.geom_matid[g] != -1 ?       model.mat_specular   [model.geom_matid[g]] : undefined,
         reflectivity     : model.geom_matid[g] != -1 ?       model.mat_reflectance[model.geom_matid[g]] : undefined,
-        roughness        : model.geom_matid[g] != -1 ? 1.0 - model.mat_shininess  [model.geom_matid[g]] * -1.0 : undefined,
-        metalness        : model.geom_matid[g] != -1 ?       model.mat_metallic   [model.geom_matid[g]] : undefined,
+        roughness        : model.geom_matid[g] != -1 ? 1.0 - model.mat_shininess  [model.geom_matid[g]] : undefined,
+        metalness        : model.geom_matid[g] != -1 ?       0.1 : undefined, //model.mat_metallic   [model.geom_matid[g]]
         map              : texture
       });
 
@@ -494,9 +494,10 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
 
     // Parse lights.
     for (let l = 0; l < model.nlight; l++) {
-      let light = new THREE.SpotLight();
+      let light = new THREE.DirectionalLight();
       if (model.light_type[l] == 0) {
         light = new THREE.SpotLight();
+        light.angle = 1.51;//model.light_cutoffangle[l];
       } else if (model.light_type[l] == 1) {
         light = new THREE.DirectionalLight();
       } else if (model.light_type[l] == 2) {
@@ -504,9 +505,13 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       }else if (model.light_type[l] == 3) {
         light = new THREE.HemisphereLight();
       }
+
+      light.angle = 1.11;
+
       light.decay = model.light_attenuation[l] * 100;
       light.penumbra = 0.5;
       light.castShadow = true; // default false
+      light.intensity = light.intensity * 3.14 * 1.0;
 
       light.shadow.mapSize.width = 1024; // default
       light.shadow.mapSize.height = 1024; // default

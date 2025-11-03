@@ -45,18 +45,39 @@ export class MuJoCoDemo {
     this.scene.background = new THREE.Color(0.15, 0.25, 0.35);
     this.scene.fog = new THREE.Fog(this.scene.background, 15, 25.5 );
 
-    this.ambientLight = new THREE.AmbientLight( 0xffffff, 0.3 );
+    this.ambientLight = new THREE.AmbientLight( 0xffffff, 0.1 * 3.14 );
     this.ambientLight.name = 'AmbientLight';
     this.scene.add( this.ambientLight );
+
+    this.spotlight = new THREE.SpotLight();
+    this.spotlight.angle = 1.11;
+    this.spotlight.distance = 10000;
+    this.spotlight.penumbra = 0.5;
+    this.spotlight.castShadow = true; // default false
+    this.spotlight.intensity = this.spotlight.intensity * 3.14 * 10.0;
+    this.spotlight.shadow.mapSize.width = 1024; // default
+    this.spotlight.shadow.mapSize.height = 1024; // default
+    this.spotlight.shadow.camera.near = 0.1; // default
+    this.spotlight.shadow.camera.far = 100; // default
+    this.spotlight.position.set(0, 3, 3);
+    const targetObject = new THREE.Object3D();
+    this.scene.add(targetObject);
+    this.spotlight.target = targetObject;
+    targetObject.position.set(0, 1, 0);
+    this.scene.add( this.spotlight );
 
     this.renderer = new THREE.WebGLRenderer( { antialias: true } );
     this.renderer.setPixelRatio(1.0);////window.devicePixelRatio );
     this.renderer.setSize( window.innerWidth, window.innerHeight );
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
+    THREE.ColorManagement.enabled = false;
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-    this.renderer.toneMapping = THREE.NeutralToneMapping;
-    this.renderer.toneMappingExposure = 2.0;
+    //this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+    //this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    //this.renderer.toneMappingExposure = 2.0;
+    this.renderer.useLegacyLights = true;
+
     this.renderer.setAnimationLoop( this.render.bind(this) );
 
     this.container.appendChild( this.renderer.domElement );
