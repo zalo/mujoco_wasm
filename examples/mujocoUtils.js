@@ -278,20 +278,8 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     parent.model = mujoco.MjModel.loadFromXML("/working/"+filename);
     parent.data  = new mujoco.MjData(parent.model);
 
-    // Recreate the mjvScene for the new model
-    if (parent.mjvScene) {
-      parent.mjvScene.delete();
-    }
-    parent.mjvScene = new mujoco.MjvScene(parent.model, 2 ** 15);
-
     let model = parent.model;
     let data = parent.data;
-
-    // Update the scene to populate geoms
-    mujoco.mj_forward(model, data);
-    mujoco.mjv_updateScene(
-      model, data, parent.mjvOption, parent.mjvPerturb,
-      parent.mjvCamera, mujoco.mjtCatBit.mjCAT_ALL.value, parent.mjvScene);
 
     // Decode the null-terminated string names.
     let textDecoder = new TextDecoder("utf-8");
@@ -314,28 +302,16 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     // Default material definition.
     let material = new THREE.MeshPhysicalMaterial();
     material.color = new THREE.Color(1, 1, 1);
+    
+    // Loop through the MuJoCo geoms and recreate them in three.js.
+    for (let g = 0; g < model.ngeom; g++) {
+      // Only visualize geom groups up to 2 (same default behavior as simulate).
+      if (!(model.geom_group[g] < 3)) { continue; }
 
-    // Loop through the MuJoCo geoms from mjvScene and recreate them in three.js.
-    const geoms = parent.mjvScene.geoms;
-    for (let g = 0; g < geoms.size(); g++) {
-      const mjvGeom = geoms.get(g);
-      if (!mjvGeom) continue;
-
-      // Get the type and IDs from the mjvGeom
-      let type = mjvGeom.type;
-      let objtype = mjvGeom.objtype;
-      let objid = mjvGeom.objid;
-
-      // For geoms, objtype should be mjOBJ_GEOM and objid is the geom index
-      // We use the geom index to look up the body and local position
-      let geomIndex = objtype === mujoco.mjtObj.mjOBJ_GEOM.value ? objid : -1;
-      let b = geomIndex >= 0 ? model.geom_bodyid[geomIndex] : 0;
-
-      // Get size from mjvGeom
+      // Get the body ID and type of the geom.
+      let b    = model.geom_bodyid[g];
+      let type = model.geom_type  [g];
       let size = [
-        //mjvGeom.size[0], // Why aren't these valid?
-        //mjvGeom.size[1],
-        //mjvGeom.size[2]
         model.geom_size[(g*3) + 0],
         model.geom_size[(g*3) + 1],
         model.geom_size[(g*3) + 2]
@@ -374,7 +350,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       } else if (type == mujoco.mjtGeom.mjGEOM_BOX.value) {
         geometry = new THREE.BoxGeometry(size[0] * 2.0, size[2] * 2.0, size[1] * 2.0);
       } else if (type == mujoco.mjtGeom.mjGEOM_MESH.value) {
-        let meshID = mjvGeom.dataid;
+        let meshID = model.geom_dataid[g];
 
         if (!(meshID in meshes)) {
           geometry = new THREE.BufferGeometry(); // TODO: Populate the Buffer Geometry with Generic Mesh Data
@@ -418,24 +394,28 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       }
       // Done with geometry creation.
 
-      // Set the Material Properties from mjvGeom
+      // Set the Material Properties of incoming bodies
       let texture = undefined;
       let color = [
-        mjvGeom.rgba[0],
-        mjvGeom.rgba[1],
-        mjvGeom.rgba[2],
-        mjvGeom.rgba[3]
-      ];
+        model.geom_rgba[(g * 4) + 0],
+        model.geom_rgba[(g * 4) + 1],
+        model.geom_rgba[(g * 4) + 2],
+        model.geom_rgba[(g * 4) + 3]];
+      if (model.geom_matid[g] != -1) {
+        let matId = model.geom_matid[g];
+        color = [
+          model.mat_rgba[(matId * 4) + 0],
+          model.mat_rgba[(matId * 4) + 1],
+          model.mat_rgba[(matId * 4) + 2],
+          model.mat_rgba[(matId * 4) + 3]];
 
-      // Check if there's a texture associated with this geom
-      let matId = mjvGeom.matid;
-      let texId = -1;
-      if (matId != -1 && model.mat_texid) {
+        // Construct Texture from model.tex_data
+        texture = undefined;
         // mat_texid is now a matrix (nmat x mjNTEXROLE)
         // We use mjTEXROLE_RGB (value 1) for standard diffuse/color textures
         const mjNTEXROLE = 10; // Total number of texture roles
         const mjTEXROLE_RGB = 1; // RGB texture role
-        texId = model.mat_texid[(matId * mjNTEXROLE) + mjTEXROLE_RGB];
+        let texId = model.mat_texid[(matId * mjNTEXROLE) + mjTEXROLE_RGB];
         
         if (texId != -1) {
           let width    = model.tex_width [texId];
@@ -451,24 +431,30 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
             rgbaArray[(p * 4) + 3] = channels > 3 ? texData[offset + ((p * channels) + 3)] : 255;
           }
           texture = new THREE.DataTexture(rgbaArray, width, height, THREE.RGBAFormat, THREE.UnsignedByteType);
-          texture.repeat = new THREE.Vector2(model.mat_texrepeat[(matId * 2) + 0],
-                                             model.mat_texrepeat[(matId * 2) + 1]);
-          texture.wrapS = THREE.RepeatWrapping;
-          texture.wrapT = THREE.RepeatWrapping;
+          if (texId == 2) {
+            texture.repeat = new THREE.Vector2(100, 100);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+          } else {
+            texture.repeat = new THREE.Vector2(model.mat_texrepeat[(model.geom_matid[g] * 2) + 0],
+                                               model.mat_texrepeat[(model.geom_matid[g] * 2) + 1]);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+          }
 
           texture.needsUpdate = true;
         }
       }
 
-      // Create a new material for each geom using mjvGeom material properties
+      // Create a new material for each geom to avoid cross-contamination
       let currentMaterial = new THREE.MeshPhysicalMaterial({
         color: new THREE.Color(color[0], color[1], color[2]),
         transparent: color[3] < 1.0,
-        opacity: color[3],
-        specularIntensity: mjvGeom.specular,
-        reflectivity     : mjvGeom.reflectance,
-        roughness        : 1.0 - mjvGeom.shininess * -1.0,
-        //metalness        : mjvGeom.metallic,
+        opacity: color[3]/255.,
+        specularIntensity: model.geom_matid[g] != -1 ?       model.mat_specular   [model.geom_matid[g]] : undefined,
+        reflectivity     : model.geom_matid[g] != -1 ?       model.mat_reflectance[model.geom_matid[g]] : undefined,
+        roughness        : model.geom_matid[g] != -1 ? 1.0 - model.mat_shininess  [model.geom_matid[g]] * -1.0 : undefined,
+        metalness        : model.geom_matid[g] != -1 ?       model.mat_metallic   [model.geom_matid[g]] : undefined,
         map              : texture
       });
 
@@ -484,20 +470,10 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       mesh.receiveShadow = type != 7;
       mesh.bodyID = b;
       bodies[b].add(mesh);
-
-      // Set position from model using geomIndex - we want local coordinates relative to the body
-      if (geomIndex >= 0 && model.geom_pos && model.geom_quat) {
-        getPosition  (model.geom_pos, geomIndex, mesh.position  );
-        if (type != 0) { getQuaternion(model.geom_quat, geomIndex, mesh.quaternion); }
-      }
+      getPosition  (model.geom_pos, g, mesh.position  );
+      if (type != 0) { getQuaternion(model.geom_quat, g, mesh.quaternion); }
       if (type == 4) { mesh.scale.set(size[0], size[2], size[1]) } // Stretch the Ellipsoid
-
-      // Clean up the mjvGeom object
-      mjvGeom.delete();
     }
-
-    // Clean up the geoms vector
-    geoms.delete();
 
     // Parse tendons.
     let tendonMat = new THREE.MeshPhongMaterial();
