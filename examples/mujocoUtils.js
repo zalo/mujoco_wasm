@@ -353,7 +353,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         let meshID = model.geom_dataid[g];
 
         if (!(meshID in meshes)) {
-          geometry = new THREE.BufferGeometry(); // TODO: Populate the Buffer Geometry with Generic Mesh Data
+          geometry = new THREE.BufferGeometry();
 
           let vertex_buffer = model.mesh_vert.subarray(
              model.mesh_vertadr[meshID] * 3,
@@ -377,7 +377,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
 
           let uv_buffer = model.mesh_texcoord.subarray(
              model.mesh_texcoordadr[meshID] * 2,
-            (model.mesh_texcoordadr[meshID]  + model.mesh_vertnum[meshID]) * 2);
+            (model.mesh_texcoordadr[meshID]  + model.mesh_texcoordnum[meshID]) * 2);
           let triangle_buffer = model.mesh_face.subarray(
              model.mesh_faceadr[meshID] * 3,
             (model.mesh_faceadr[meshID]  + model.mesh_facenum[meshID]) * 3);
@@ -385,6 +385,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
           geometry.setAttribute("normal"  , new THREE.BufferAttribute(normal_buffer, 3));
           geometry.setAttribute("uv"      , new THREE.BufferAttribute(    uv_buffer, 2));
           geometry.setIndex    (Array.from(triangle_buffer));
+          //geometry.computeVertexNormals(); // Normals acting strangely...
           meshes[meshID] = geometry;
         } else {
           geometry = meshes[meshID];

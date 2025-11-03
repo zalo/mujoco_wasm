@@ -45,7 +45,7 @@ export class MuJoCoDemo {
     this.scene.background = new THREE.Color(0.15, 0.25, 0.35);
     this.scene.fog = new THREE.Fog(this.scene.background, 15, 25.5 );
 
-    this.ambientLight = new THREE.AmbientLight( 0xffffff, 0.1 );
+    this.ambientLight = new THREE.AmbientLight( 0xffffff, 0.3 );
     this.ambientLight.name = 'AmbientLight';
     this.scene.add( this.ambientLight );
 
@@ -54,8 +54,9 @@ export class MuJoCoDemo {
     this.renderer.setSize( window.innerWidth, window.innerHeight );
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    //this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
+    this.renderer.toneMappingExposure = 2.0;
     this.renderer.setAnimationLoop( this.render.bind(this) );
 
     this.container.appendChild( this.renderer.domElement );
