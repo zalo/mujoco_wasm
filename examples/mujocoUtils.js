@@ -366,8 +366,8 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
           }
 
           let normal_buffer = model.mesh_normal.subarray(
-             model.mesh_vertadr[meshID] * 3,
-            (model.mesh_vertadr[meshID]  + model.mesh_vertnum[meshID]) * 3);
+             model.mesh_normaladr[meshID] * 3,
+            (model.mesh_normaladr[meshID]  + model.mesh_normalnum[meshID]) * 3);
           for (let v = 0; v < normal_buffer.length; v+=3){
             //normal_buffer[v + 0] =  normal_buffer[v + 0];
             let temp             =  normal_buffer[v + 1];
