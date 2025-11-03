@@ -331,8 +331,6 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       let geomIndex = objtype === mujoco.mjtObj.mjOBJ_GEOM.value ? objid : -1;
       let b = geomIndex >= 0 ? model.geom_bodyid[geomIndex] : 0;
 
-      console.log(`Processing geom ${g}: objtype=${objtype}, objid=${objid}, geomIndex=${geomIndex}, bodyId=${b}, type=${type}, matId=${mjvGeom.matid}`);
-
       // Get size from mjvGeom
       let size = [
         //mjvGeom.size[0], // Why aren't these valid?
@@ -432,19 +430,19 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       // Check if there's a texture associated with this geom
       let matId = mjvGeom.matid;
       let texId = -1;
-      //let mat = mjvGeom; // MjsMaterial
-      console.log("Geom", mjvGeom, "Mat", mjvGeom.mat, "MatID", mjvGeom.matid);
-      //let tex = mat.textures[0]; // MjsTexture?
       if (matId != -1 && model.mat_texid) {
-        texId = model.mat_texid[matId];
-        console.log(`Geom ${g}: matId=${matId}, texId=${texId}, type=${type}`);
+        // mat_texid is now a matrix (nmat x mjNTEXROLE)
+        // We use mjTEXROLE_RGB (value 1) for standard diffuse/color textures
+        const mjNTEXROLE = 10; // Total number of texture roles
+        const mjTEXROLE_RGB = 1; // RGB texture role
+        texId = model.mat_texid[(matId * mjNTEXROLE) + mjTEXROLE_RGB];
+        
         if (texId != -1) {
           let width    = model.tex_width [texId];
           let height   = model.tex_height[texId];
           let offset   = model.tex_adr   [texId];
           let channels = model.tex_nchannel[texId];
           let texData  = model.tex_data;
-          console.log(`  Texture ${texId}: ${width}x${height}, offset=${offset}, channels=${channels}, dataLength=${texData.length}`);
           let rgbaArray = new Uint8Array(width * height * 4);
           for (let p = 0; p < width * height; p++){
             rgbaArray[(p * 4) + 0] = texData[offset + ((p * channels) + 0)];
