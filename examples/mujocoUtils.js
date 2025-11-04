@@ -378,14 +378,52 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
           let uv_buffer = model.mesh_texcoord.subarray(
              model.mesh_texcoordadr[meshID] * 2,
             (model.mesh_texcoordadr[meshID]  + model.mesh_texcoordnum[meshID]) * 2);
-          let triangle_buffer = model.mesh_face.subarray(
+
+          let face_to_vertex_buffer = model.mesh_face.subarray(
              model.mesh_faceadr[meshID] * 3,
             (model.mesh_faceadr[meshID]  + model.mesh_facenum[meshID]) * 3);
+          let face_to_uv_buffer = model.mesh_facetexcoord.subarray(
+             model.mesh_faceadr[meshID] * 3,
+            (model.mesh_faceadr[meshID]  + model.mesh_facenum[meshID]) * 3);
+          let face_to_normal_buffer = model.mesh_facenormal.subarray(
+             model.mesh_faceadr[meshID] * 3,
+            (model.mesh_faceadr[meshID]  + model.mesh_facenum[meshID]) * 3);
+
+          // The UV and Normal Buffers are actually indexed by the triangle indices through the face_to_uv_buffer and face_to_normal_buffer.
+          // We need to swizzle them into a per-vertex format for three.js
+          let swizzled_uv_buffer      = new Float32Array((vertex_buffer.length / 3) * 2);
+          let swizzled_normal_buffer  = new Float32Array(vertex_buffer.length);
+          for (let t = 0; t < face_to_vertex_buffer.length / 3; t++) {
+            let vi0 = face_to_vertex_buffer[(t * 3) + 0];
+            let vi1 = face_to_vertex_buffer[(t * 3) + 1];
+            let vi2 = face_to_vertex_buffer[(t * 3) + 2];
+            let uvi0 = face_to_uv_buffer[(t * 3) + 0];
+            let uvi1 = face_to_uv_buffer[(t * 3) + 1];
+            let uvi2 = face_to_uv_buffer[(t * 3) + 2];
+            let nvi0 = face_to_normal_buffer[(t * 3) + 0];
+            let nvi1 = face_to_normal_buffer[(t * 3) + 1];
+            let nvi2 = face_to_normal_buffer[(t * 3) + 2];
+            swizzled_uv_buffer[(vi0 * 2) + 0] = uv_buffer[(uvi0 * 2) + 0];
+            swizzled_uv_buffer[(vi0 * 2) + 1] = uv_buffer[(uvi0 * 2) + 1];
+            swizzled_uv_buffer[(vi1 * 2) + 0] = uv_buffer[(uvi1 * 2) + 0];
+            swizzled_uv_buffer[(vi1 * 2) + 1] = uv_buffer[(uvi1 * 2) + 1];
+            swizzled_uv_buffer[(vi2 * 2) + 0] = uv_buffer[(uvi2 * 2) + 0];
+            swizzled_uv_buffer[(vi2 * 2) + 1] = uv_buffer[(uvi2 * 2) + 1];
+            swizzled_normal_buffer[(vi0 * 3) + 0] = normal_buffer[(nvi0 * 3) + 0];
+            swizzled_normal_buffer[(vi0 * 3) + 1] = normal_buffer[(nvi0 * 3) + 1];
+            swizzled_normal_buffer[(vi0 * 3) + 2] = normal_buffer[(nvi0 * 3) + 2];
+            swizzled_normal_buffer[(vi1 * 3) + 0] = normal_buffer[(nvi1 * 3) + 0];
+            swizzled_normal_buffer[(vi1 * 3) + 1] = normal_buffer[(nvi1 * 3) + 1];
+            swizzled_normal_buffer[(vi1 * 3) + 2] = normal_buffer[(nvi1 * 3) + 2];
+            swizzled_normal_buffer[(vi2 * 3) + 0] = normal_buffer[(nvi2 * 3) + 0];
+            swizzled_normal_buffer[(vi2 * 3) + 1] = normal_buffer[(nvi2 * 3) + 1];
+            swizzled_normal_buffer[(vi2 * 3) + 2] = normal_buffer[(nvi2 * 3) + 2];
+          }
           geometry.setAttribute("position", new THREE.BufferAttribute(vertex_buffer, 3));
-          geometry.setAttribute("normal"  , new THREE.BufferAttribute(normal_buffer, 3));
-          geometry.setAttribute("uv"      , new THREE.BufferAttribute(    uv_buffer, 2));
-          geometry.setIndex    (Array.from(triangle_buffer));
-          //geometry.computeVertexNormals(); // Normals acting strangely...
+          geometry.setAttribute("normal"  , new THREE.BufferAttribute(swizzled_normal_buffer, 3));
+          geometry.setAttribute("uv"      , new THREE.BufferAttribute(swizzled_uv_buffer, 2));
+          geometry.setIndex    (Array.from(face_to_vertex_buffer));
+          geometry.computeVertexNormals(); // MuJoCo Normals acting strangely... just recompute them
           meshes[meshID] = geometry;
         } else {
           geometry = meshes[meshID];
@@ -573,7 +611,6 @@ export async function downloadExampleScenesFolder(mujoco) {
     "arm26.xml",
     "balloons.xml",
     "car.xml",
-    "flag.xml",
     "flex.xml",
     "hammock.xml",
     "humanoid.xml",
