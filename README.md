@@ -16,35 +16,13 @@
 
 ## The Power of MuJoCo in your Browser.
 
-Load and Run MuJoCo 3.3.8.X Models using JavaScript and WebAssembly.
+Load and Run MuJoCo 3.3.8 Models using JavaScript and the official MuJoCo WebAssembly Bindings.
+
+This project used to be a WASM compilation and set of javascript bindings for MuJoCo, but since Deepmind completed the official MuJoCo bindings, this project is now just a small demo suite in the `examples` folder.
 
 ### [See the Live Demo Here](https://zalo.github.io/mujoco_wasm/)
 
 ### [See a more Advanced Example Here](https://kzakka.com/robopianist/)
-
-## Building
-
-**1. Install emscripten**
-
-**2. Autogenerate the bindings by running src/parse_mjxmacro.py**
-
-**3. Build the mujoco_wasm Binary**
-
-On Linux, use:
-```bash
-mkdir build
-cd build
-emcmake cmake ..
-make
-```
-
-On Windows, run `build_windows.bat`.
-
-An older version of Emscripten (<3.1.56) may be necessary.
-
-*4. (Optional) Update MuJoCo libs*
-
-Build MuJoCo libs with wasm target and place to lib. Currently v2.3.1 included.
 
 ## JavaScript API
 

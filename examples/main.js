@@ -242,6 +242,7 @@ export class MuJoCoDemo {
     }
 
     // Update tendon transforms.
+    let identityQuat = new THREE.Quaternion();
     let numWraps = 0;
     if (this.mujocoRoot && this.mujocoRoot.cylinders) {
       let mat = new THREE.Matrix4();
@@ -256,10 +257,10 @@ export class MuJoCoDemo {
           let validStart = tendonStart.length() > 0.01;
           let validEnd   = tendonEnd  .length() > 0.01;
 
-          if (validStart) { this.mujocoRoot.spheres.setMatrixAt(numWraps    , mat.compose(tendonStart, new THREE.Quaternion(), new THREE.Vector3(r, r, r))); }
-          if (validEnd  ) { this.mujocoRoot.spheres.setMatrixAt(numWraps + 1, mat.compose(tendonEnd  , new THREE.Quaternion(), new THREE.Vector3(r, r, r))); }
+          if (validStart) { this.mujocoRoot.spheres.setMatrixAt(numWraps    , mat.compose(tendonStart, identityQuat, new THREE.Vector3(r, r, r))); }
+          if (validEnd  ) { this.mujocoRoot.spheres.setMatrixAt(numWraps + 1, mat.compose(tendonEnd  , identityQuat, new THREE.Vector3(r, r, r))); }
           if (validStart && validEnd) {
-            mat.compose(tendonAvg, new THREE.Quaternion().setFromUnitVectors(
+            mat.compose(tendonAvg, identityQuat.setFromUnitVectors(
               new THREE.Vector3(0, 1, 0), tendonEnd.clone().sub(tendonStart).normalize()),
               new THREE.Vector3(r, tendonStart.distanceTo(tendonEnd), r));
             this.mujocoRoot.cylinders.setMatrixAt(numWraps, mat);
@@ -267,8 +268,23 @@ export class MuJoCoDemo {
           }
         }
       }
+
+      let curFlexSphereInd = numWraps;
+      let tempvertPos = new THREE.Vector3();
+      let tempvertRad = new THREE.Vector3();
+      for (let i = 0; i < this.model.nflex; i++) {
+        for(let j = 0; j < this.model.flex_vertnum[i]; j++) {
+          let vertIndex = this.model.flex_vertadr[i] + j;
+          getPosition(this.data.flexvert_xpos, vertIndex, tempvertPos);
+          let r   = 0.01;
+          mat.compose(tempvertPos, identityQuat, tempvertRad.set(r, r, r));
+
+          this.mujocoRoot.spheres.setMatrixAt(curFlexSphereInd, mat);
+          curFlexSphereInd++;
+        }
+      }
       this.mujocoRoot.cylinders.count = numWraps;
-      this.mujocoRoot.spheres  .count = numWraps > 0 ? numWraps + 1: 0;
+      this.mujocoRoot.spheres  .count = curFlexSphereInd;
       this.mujocoRoot.cylinders.instanceMatrix.needsUpdate = true;
       this.mujocoRoot.spheres  .instanceMatrix.needsUpdate = true;
     }

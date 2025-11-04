@@ -29,7 +29,7 @@ export function setupGUI(parentContext) {
   parentContext.gui.add(parentContext.params, 'scene', {
     "Humanoid": "humanoid.xml", "Cassie": "agility_cassie/scene.xml",
     "Hammock": "hammock.xml", "Balloons": "balloons.xml", "Hand": "shadow_hand/scene_right.xml",
-    "Flag": "flag.xml", "Mug": "mug.xml", "Tendon": "model_with_tendon.xml",
+    "Mug": "mug.xml", "Tendon": "model_with_tendon.xml",
     "Torture Model": "model.xml", "Flex": "flex.xml", "Car": "car.xml", 
   }).name('Example Scene').onChange(reload);
 
@@ -289,7 +289,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
 
     // Create the root object.
     let mujocoRoot = new THREE.Group();
-    mujocoRoot.name = "MuJoCo Root"
+    mujocoRoot.name = "MuJoCo Root";
     parent.scene.add(mujocoRoot);
 
     /** @type {Object.<number, THREE.Group>} */
@@ -459,7 +459,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         map              : texture
       });
 
-      let mesh = new THREE.Mesh();
+      let mesh;// = new THREE.Mesh();
       if (type == 0) {
         mesh = new Reflector( new THREE.PlaneGeometry( 100, 100 ), { clipBias: 0.003, texture: texture } );
         mesh.rotateX( - Math.PI / 2 );
@@ -473,7 +473,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       bodies[b].add(mesh);
       getPosition  (model.geom_pos, g, mesh.position  );
       if (type != 0) { getQuaternion(model.geom_quat, g, mesh.quaternion); }
-      if (type == 4) { mesh.scale.set(size[0], size[2], size[1]) } // Stretch the Ellipsoid
+      if (type == 4) { mesh.scale.set(size[0], size[2], size[1]); } // Stretch the Ellipsoid
     }
 
     // Parse tendons.
@@ -545,7 +545,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
   
     parent.mujocoRoot = mujocoRoot;
 
-    return [model, data, bodies, lights]
+    return [model, data, bodies, lights];
 }
 
 /** Downloads the scenes/examples folder to MuJoCo's virtual filesystem
