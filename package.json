@@ -24,6 +24,6 @@
   },
   "homepage": "https://github.com/zalo/mujoco_wasm#readme",
   "dependencies": {
-    "three": "^0.150.1"
+    "three": "^0.181.0"
   }
 }

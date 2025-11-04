@@ -11,7 +11,7 @@ import {
 	WebGLRenderTarget,
 	HalfFloatType,
 	NoToneMapping,
-	LinearEncoding,
+	LinearSRGBColorSpace,
     MeshPhysicalMaterial
 } from 'three';
 
@@ -29,8 +29,8 @@ class Reflector extends Mesh {
 		const scope = this;
 
 		const color = ( options.color !== undefined ) ? new Color( options.color ) : new Color( 0x7F7F7F );
-		const textureWidth = options.textureWidth || 512;
-		const textureHeight = options.textureHeight || 512;
+		const textureWidth = options.textureWidth || 1024;
+		const textureHeight = options.textureHeight || 1024;
 		const clipBias = options.clipBias || 0;
 		const shader = options.shader || Reflector.ReflectorShader;
 		const multisample = ( options.multisample !== undefined ) ? options.multisample : 4;
@@ -170,12 +170,12 @@ class Reflector extends Mesh {
 
 			const currentXrEnabled = renderer.xr.enabled;
 			const currentShadowAutoUpdate = renderer.shadowMap.autoUpdate;
-			const currentOutputEncoding = renderer.outputEncoding;
+			const currentOutputEncoding = renderer.outputColorSpace;
 			const currentToneMapping = renderer.toneMapping;
 
 			renderer.xr.enabled = false; // Avoid camera modification
 			renderer.shadowMap.autoUpdate = false; // Avoid re-computing shadows
-			renderer.outputEncoding = LinearEncoding;
+			renderer.outputColorSpace = LinearSRGBColorSpace;
 			renderer.toneMapping = NoToneMapping;
 
 			renderer.setRenderTarget( renderTarget );
@@ -187,7 +187,7 @@ class Reflector extends Mesh {
 
 			renderer.xr.enabled = currentXrEnabled;
 			renderer.shadowMap.autoUpdate = currentShadowAutoUpdate;
-			renderer.outputEncoding = currentOutputEncoding;
+			renderer.outputColorSpace = currentOutputEncoding;
 			renderer.toneMapping = currentToneMapping;
 
 			renderer.setRenderTarget( currentRenderTarget );

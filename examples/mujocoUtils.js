@@ -5,11 +5,11 @@ import { MuJoCoDemo } from './main.js';
 export async function reloadFunc() {
   // Delete the old scene and load the new scene
   this.scene.remove(this.scene.getObjectByName("MuJoCo Root"));
-  [this.model, this.state, this.simulation, this.bodies, this.lights] =
+  [this.model, this.data, this.bodies, this.lights] =
     await loadSceneFromURL(this.mujoco, this.params.scene, this);
-  this.simulation.forward();
+  this.mujoco.mj_forward(this.model, this.data);
   for (let i = 0; i < this.updateGUICallbacks.length; i++) {
-    this.updateGUICallbacks[i](this.model, this.simulation, this.params);
+    this.updateGUICallbacks[i](this.model, this.data, this.params);
   }
 }
 
@@ -18,7 +18,7 @@ export function setupGUI(parentContext) {
 
   // Make sure we reset the camera when the scene is changed or reloaded.
   parentContext.updateGUICallbacks.length = 0;
-  parentContext.updateGUICallbacks.push((model, simulation, params) => {
+  parentContext.updateGUICallbacks.push((model, data, params) => {
     // TODO: Use free camera parameters from MuJoCo
     parentContext.camera.position.set(2.0, 1.7, 1.7);
     parentContext.controls.target.set(0, 0.7, 0);
@@ -29,7 +29,8 @@ export function setupGUI(parentContext) {
   parentContext.gui.add(parentContext.params, 'scene', {
     "Humanoid": "humanoid.xml", "Cassie": "agility_cassie/scene.xml",
     "Hammock": "hammock.xml", "Balloons": "balloons.xml", "Hand": "shadow_hand/scene_right.xml",
-    "Flag": "flag.xml", "Mug": "mug.xml", "Tendon": "model_with_tendon.xml"
+    "Mug": "mug.xml", "Tendon": "model_with_tendon.xml",
+    "Torture Model": "model.xml", "Flex": "flex.xml", "Car": "car.xml", 
   }).name('Example Scene').onChange(reload);
 
   // Add a help menu.
@@ -177,8 +178,8 @@ export function setupGUI(parentContext) {
   //  When pressed, resets the simulation to the initial state.
   //  Can also be triggered by pressing backspace.
   const resetSimulation = () => {
-    parentContext.simulation.resetData();
-    parentContext.simulation.forward();
+    parentContext.mujoco.mj_resetData(parentContext.model, parentContext.data);
+    parentContext.mujoco.mj_forward(parentContext.model, parentContext.data);
   };
   simulationFolder.add({reset: () => { resetSimulation(); }}, 'reset').name('Reset');
   document.addEventListener('keydown', (event) => {
@@ -191,9 +192,9 @@ export function setupGUI(parentContext) {
   let keyframeGUI = simulationFolder.add(parentContext.params, "keyframeNumber", 0, nkeys - 1, 1).name('Load Keyframe').listen();
   keyframeGUI.onChange((value) => {
     if (value < parentContext.model.nkey) {
-      parentContext.simulation.qpos.set(parentContext.model.key_qpos.slice(
+      parentContext.data.qpos.set(parentContext.model.key_qpos.slice(
         value * parentContext.model.nq, (value + 1) * parentContext.model.nq)); }});
-  parentContext.updateGUICallbacks.push((model, simulation, params) => {
+  parentContext.updateGUICallbacks.push((model, data, params) => {
     let nkeys = parentContext.model.nkey;
     console.log("new model loaded. has " + nkeys + " keyframes.");
     if (nkeys > 0) {
@@ -215,7 +216,7 @@ export function setupGUI(parentContext) {
 
   // Add actuator sliders.
   let actuatorFolder = simulationFolder.addFolder("Actuators");
-  const addActuators = (model, simulation, params) => {
+  const addActuators = (model, data, params) => {
     let act_range = model.actuator_ctrlrange;
     let actuatorGUIs = [];
     for (let i = 0; i < model.nu; i++) {
@@ -228,17 +229,17 @@ export function setupGUI(parentContext) {
       let actuatorGUI = actuatorFolder.add(parentContext.params, name, act_range[2 * i], act_range[2 * i + 1], 0.01).name(name).listen();
       actuatorGUIs.push(actuatorGUI);
       actuatorGUI.onChange((value) => {
-        simulation.ctrl[i] = value;
+        data.ctrl[i] = value;
       });
     }
     return actuatorGUIs;
   };
-  let actuatorGUIs = addActuators(parentContext.model, parentContext.simulation, parentContext.params);
-  parentContext.updateGUICallbacks.push((model, simulation, params) => {
+  let actuatorGUIs = addActuators(parentContext.model, parentContext.data, parentContext.params);
+  parentContext.updateGUICallbacks.push((model, data, params) => {
     for (let i = 0; i < actuatorGUIs.length; i++) {
       actuatorGUIs[i].destroy();
     }
-    actuatorGUIs = addActuators(model, simulation, parentContext.params);
+    actuatorGUIs = addActuators(model, data, parentContext.params);
   });
   actuatorFolder.close();
 
@@ -266,22 +267,19 @@ export function setupGUI(parentContext) {
  * @param {MuJoCoDemo} parent The three.js Scene Object to add the MuJoCo model elements to
  */
 export async function loadSceneFromURL(mujoco, filename, parent) {
-    // Free the old simulation.
-    if (parent.simulation != null) {
-      parent.simulation.free();
-      parent.model      = null;
-      parent.state      = null;
-      parent.simulation = null;
+    // Free the old data.
+    if (parent.data != null) {
+      parent.data.delete();
+      parent.model = null;
+      parent.data  = null;
     }
 
     // Load in the state from XML.
-    parent.model       = mujoco.Model.load_from_xml("/working/"+filename);
-    parent.state       = new mujoco.State(parent.model);
-    parent.simulation  = new mujoco.Simulation(parent.model, parent.state);
+    parent.model = mujoco.MjModel.loadFromXML("/working/"+filename);
+    parent.data  = new mujoco.MjData(parent.model);
 
     let model = parent.model;
-    let state = parent.state;
-    let simulation = parent.simulation;
+    let data = parent.data;
 
     // Decode the null-terminated string names.
     let textDecoder = new TextDecoder("utf-8");
@@ -291,7 +289,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
 
     // Create the root object.
     let mujocoRoot = new THREE.Group();
-    mujocoRoot.name = "MuJoCo Root"
+    mujocoRoot.name = "MuJoCo Root";
     parent.scene.add(mujocoRoot);
 
     /** @type {Object.<number, THREE.Group>} */
@@ -304,15 +302,15 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     // Default material definition.
     let material = new THREE.MeshPhysicalMaterial();
     material.color = new THREE.Color(1, 1, 1);
-
+    
     // Loop through the MuJoCo geoms and recreate them in three.js.
     for (let g = 0; g < model.ngeom; g++) {
       // Only visualize geom groups up to 2 (same default behavior as simulate).
       if (!(model.geom_group[g] < 3)) { continue; }
 
       // Get the body ID and type of the geom.
-      let b = model.geom_bodyid[g];
-      let type = model.geom_type[g];
+      let b    = model.geom_bodyid[g];
+      let type = model.geom_type  [g];
       let size = [
         model.geom_size[(g*3) + 0],
         model.geom_size[(g*3) + 1],
@@ -355,7 +353,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         let meshID = model.geom_dataid[g];
 
         if (!(meshID in meshes)) {
-          geometry = new THREE.BufferGeometry(); // TODO: Populate the Buffer Geometry with Generic Mesh Data
+          geometry = new THREE.BufferGeometry();
 
           let vertex_buffer = model.mesh_vert.subarray(
              model.mesh_vertadr[meshID] * 3,
@@ -368,8 +366,8 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
           }
 
           let normal_buffer = model.mesh_normal.subarray(
-             model.mesh_vertadr[meshID] * 3,
-            (model.mesh_vertadr[meshID]  + model.mesh_vertnum[meshID]) * 3);
+             model.mesh_normaladr[meshID] * 3,
+            (model.mesh_normaladr[meshID]  + model.mesh_normalnum[meshID]) * 3);
           for (let v = 0; v < normal_buffer.length; v+=3){
             //normal_buffer[v + 0] =  normal_buffer[v + 0];
             let temp             =  normal_buffer[v + 1];
@@ -379,14 +377,53 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
 
           let uv_buffer = model.mesh_texcoord.subarray(
              model.mesh_texcoordadr[meshID] * 2,
-            (model.mesh_texcoordadr[meshID]  + model.mesh_vertnum[meshID]) * 2);
-          let triangle_buffer = model.mesh_face.subarray(
+            (model.mesh_texcoordadr[meshID]  + model.mesh_texcoordnum[meshID]) * 2);
+
+          let face_to_vertex_buffer = model.mesh_face.subarray(
              model.mesh_faceadr[meshID] * 3,
             (model.mesh_faceadr[meshID]  + model.mesh_facenum[meshID]) * 3);
+          let face_to_uv_buffer = model.mesh_facetexcoord.subarray(
+             model.mesh_faceadr[meshID] * 3,
+            (model.mesh_faceadr[meshID]  + model.mesh_facenum[meshID]) * 3);
+          let face_to_normal_buffer = model.mesh_facenormal.subarray(
+             model.mesh_faceadr[meshID] * 3,
+            (model.mesh_faceadr[meshID]  + model.mesh_facenum[meshID]) * 3);
+
+          // The UV and Normal Buffers are actually indexed by the triangle indices through the face_to_uv_buffer and face_to_normal_buffer.
+          // We need to swizzle them into a per-vertex format for three.js
+          let swizzled_uv_buffer      = new Float32Array((vertex_buffer.length / 3) * 2);
+          let swizzled_normal_buffer  = new Float32Array(vertex_buffer.length);
+          for (let t = 0; t < face_to_vertex_buffer.length / 3; t++) {
+            let vi0 = face_to_vertex_buffer[(t * 3) + 0];
+            let vi1 = face_to_vertex_buffer[(t * 3) + 1];
+            let vi2 = face_to_vertex_buffer[(t * 3) + 2];
+            let uvi0 = face_to_uv_buffer[(t * 3) + 0];
+            let uvi1 = face_to_uv_buffer[(t * 3) + 1];
+            let uvi2 = face_to_uv_buffer[(t * 3) + 2];
+            let nvi0 = face_to_normal_buffer[(t * 3) + 0];
+            let nvi1 = face_to_normal_buffer[(t * 3) + 1];
+            let nvi2 = face_to_normal_buffer[(t * 3) + 2];
+            swizzled_uv_buffer[(vi0 * 2) + 0] = uv_buffer[(uvi0 * 2) + 0];
+            swizzled_uv_buffer[(vi0 * 2) + 1] = uv_buffer[(uvi0 * 2) + 1];
+            swizzled_uv_buffer[(vi1 * 2) + 0] = uv_buffer[(uvi1 * 2) + 0];
+            swizzled_uv_buffer[(vi1 * 2) + 1] = uv_buffer[(uvi1 * 2) + 1];
+            swizzled_uv_buffer[(vi2 * 2) + 0] = uv_buffer[(uvi2 * 2) + 0];
+            swizzled_uv_buffer[(vi2 * 2) + 1] = uv_buffer[(uvi2 * 2) + 1];
+            swizzled_normal_buffer[(vi0 * 3) + 0] = normal_buffer[(nvi0 * 3) + 0];
+            swizzled_normal_buffer[(vi0 * 3) + 1] = normal_buffer[(nvi0 * 3) + 1];
+            swizzled_normal_buffer[(vi0 * 3) + 2] = normal_buffer[(nvi0 * 3) + 2];
+            swizzled_normal_buffer[(vi1 * 3) + 0] = normal_buffer[(nvi1 * 3) + 0];
+            swizzled_normal_buffer[(vi1 * 3) + 1] = normal_buffer[(nvi1 * 3) + 1];
+            swizzled_normal_buffer[(vi1 * 3) + 2] = normal_buffer[(nvi1 * 3) + 2];
+            swizzled_normal_buffer[(vi2 * 3) + 0] = normal_buffer[(nvi2 * 3) + 0];
+            swizzled_normal_buffer[(vi2 * 3) + 1] = normal_buffer[(nvi2 * 3) + 1];
+            swizzled_normal_buffer[(vi2 * 3) + 2] = normal_buffer[(nvi2 * 3) + 2];
+          }
           geometry.setAttribute("position", new THREE.BufferAttribute(vertex_buffer, 3));
-          geometry.setAttribute("normal"  , new THREE.BufferAttribute(normal_buffer, 3));
-          geometry.setAttribute("uv"      , new THREE.BufferAttribute(    uv_buffer, 2));
-          geometry.setIndex    (Array.from(triangle_buffer));
+          geometry.setAttribute("normal"  , new THREE.BufferAttribute(swizzled_normal_buffer, 3));
+          geometry.setAttribute("uv"      , new THREE.BufferAttribute(swizzled_uv_buffer, 2));
+          geometry.setIndex    (Array.from(face_to_vertex_buffer));
+          geometry.computeVertexNormals(); // MuJoCo Normals acting strangely... just recompute them
           meshes[meshID] = geometry;
         } else {
           geometry = meshes[meshID];
@@ -411,20 +448,26 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
           model.mat_rgba[(matId * 4) + 2],
           model.mat_rgba[(matId * 4) + 3]];
 
-        // Construct Texture from model.tex_rgb
+        // Construct Texture from model.tex_data
         texture = undefined;
-        let texId = model.mat_texid[matId];
+        // mat_texid is now a matrix (nmat x mjNTEXROLE)
+        // We use mjTEXROLE_RGB (value 1) for standard diffuse/color textures
+        const mjNTEXROLE = 10; // Total number of texture roles
+        const mjTEXROLE_RGB = 1; // RGB texture role
+        let texId = model.mat_texid[(matId * mjNTEXROLE) + mjTEXROLE_RGB];
+        
         if (texId != -1) {
           let width    = model.tex_width [texId];
           let height   = model.tex_height[texId];
           let offset   = model.tex_adr   [texId];
-          let rgbArray = model.tex_rgb   ;
+          let channels = model.tex_nchannel[texId];
+          let texData  = model.tex_data;
           let rgbaArray = new Uint8Array(width * height * 4);
           for (let p = 0; p < width * height; p++){
-            rgbaArray[(p * 4) + 0] = rgbArray[offset + ((p * 3) + 0)];
-            rgbaArray[(p * 4) + 1] = rgbArray[offset + ((p * 3) + 1)];
-            rgbaArray[(p * 4) + 2] = rgbArray[offset + ((p * 3) + 2)];
-            rgbaArray[(p * 4) + 3] = 1.0;
+            rgbaArray[(p * 4) + 0] = texData[offset + ((p * channels) + 0)];
+            rgbaArray[(p * 4) + 1] = channels > 1 ? texData[offset + ((p * channels) + 1)] : rgbaArray[(p * 4) + 0];
+            rgbaArray[(p * 4) + 2] = channels > 2 ? texData[offset + ((p * channels) + 2)] : rgbaArray[(p * 4) + 0];
+            rgbaArray[(p * 4) + 3] = channels > 3 ? texData[offset + ((p * channels) + 3)] : 255;
           }
           texture = new THREE.DataTexture(rgbaArray, width, height, THREE.RGBAFormat, THREE.UnsignedByteType);
           if (texId == 2) {
@@ -432,7 +475,8 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
           } else {
-            texture.repeat = new THREE.Vector2(1, 1);
+            texture.repeat = new THREE.Vector2(model.mat_texrepeat[(model.geom_matid[g] * 2) + 0],
+                                               model.mat_texrepeat[(model.geom_matid[g] * 2) + 1]);
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
           }
@@ -441,29 +485,24 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         }
       }
 
-      if (material.color.r != color[0] ||
-          material.color.g != color[1] ||
-          material.color.b != color[2] ||
-          material.opacity != color[3] ||
-          material.map     != texture) {
-        material = new THREE.MeshPhysicalMaterial({
-          color: new THREE.Color(color[0], color[1], color[2]),
-          transparent: color[3] < 1.0,
-          opacity: color[3],
-          specularIntensity: model.geom_matid[g] != -1 ?       model.mat_specular   [model.geom_matid[g]] *0.5 : undefined,
-          reflectivity     : model.geom_matid[g] != -1 ?       model.mat_reflectance[model.geom_matid[g]] : undefined,
-          roughness        : model.geom_matid[g] != -1 ? 1.0 - model.mat_shininess  [model.geom_matid[g]] : undefined,
-          metalness        : model.geom_matid[g] != -1 ? 0.1 : undefined,
-          map              : texture
-        });
-      }
+      // Create a new material for each geom to avoid cross-contamination
+      let currentMaterial = new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(color[0], color[1], color[2]),
+        transparent: color[3] < 1.0,
+        opacity: color[3]/255.,
+        specularIntensity: model.geom_matid[g] != -1 ?       model.mat_specular   [model.geom_matid[g]] : undefined,
+        reflectivity     : model.geom_matid[g] != -1 ?       model.mat_reflectance[model.geom_matid[g]] : undefined,
+        roughness        : model.geom_matid[g] != -1 ? 1.0 - model.mat_shininess  [model.geom_matid[g]] : undefined,
+        metalness        : model.geom_matid[g] != -1 ?       0.1 : undefined, //model.mat_metallic   [model.geom_matid[g]]
+        map              : texture
+      });
 
-      let mesh = new THREE.Mesh();
+      let mesh;// = new THREE.Mesh();
       if (type == 0) {
-        mesh = new Reflector( new THREE.PlaneGeometry( 100, 100 ), { clipBias: 0.003,texture: texture } );
+        mesh = new Reflector( new THREE.PlaneGeometry( 100, 100 ), { clipBias: 0.003, texture: texture } );
         mesh.rotateX( - Math.PI / 2 );
       } else {
-        mesh = new THREE.Mesh(geometry, material);
+        mesh = new THREE.Mesh(geometry, currentMaterial);
       }
 
       mesh.castShadow = g == 0 ? false : true;
@@ -472,7 +511,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       bodies[b].add(mesh);
       getPosition  (model.geom_pos, g, mesh.position  );
       if (type != 0) { getQuaternion(model.geom_quat, g, mesh.quaternion); }
-      if (type == 4) { mesh.scale.set(size[0], size[2], size[1]) } // Stretch the Ellipsoid
+      if (type == 4) { mesh.scale.set(size[0], size[2], size[1]); } // Stretch the Ellipsoid
     }
 
     // Parse tendons.
@@ -493,19 +532,28 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
 
     // Parse lights.
     for (let l = 0; l < model.nlight; l++) {
-      let light = new THREE.SpotLight();
-      if (model.light_directional[l]) {
-        light = new THREE.DirectionalLight();
-      } else {
+      let light = new THREE.DirectionalLight();
+      if (model.light_type[l] == 0) {
         light = new THREE.SpotLight();
+        light.angle = 1.51;//model.light_cutoffangle[l];
+      } else if (model.light_type[l] == 1) {
+        light = new THREE.DirectionalLight();
+      } else if (model.light_type[l] == 2) {
+        light = new THREE.PointLight();
+      }else if (model.light_type[l] == 3) {
+        light = new THREE.HemisphereLight();
       }
+
+      light.angle = 1.11;
+
       light.decay = model.light_attenuation[l] * 100;
       light.penumbra = 0.5;
       light.castShadow = true; // default false
+      light.intensity = light.intensity * 3.14 * 1.0;
 
       light.shadow.mapSize.width = 1024; // default
       light.shadow.mapSize.height = 1024; // default
-      light.shadow.camera.near = 1; // default
+      light.shadow.camera.near = 0.1; // default
       light.shadow.camera.far = 10; // default
       //bodies[model.light_bodyid()].add(light);
       if (bodies[0]) {
@@ -535,7 +583,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
   
     parent.mujocoRoot = mujocoRoot;
 
-    return [model, state, simulation, bodies, lights]
+    return [model, data, bodies, lights];
 }
 
 /** Downloads the scenes/examples folder to MuJoCo's virtual filesystem
@@ -562,10 +610,12 @@ export async function downloadExampleScenesFolder(mujoco) {
     "agility_cassie/scene.xml",
     "arm26.xml",
     "balloons.xml",
-    "flag.xml",
+    "car.xml",
+    "flex.xml",
     "hammock.xml",
     "humanoid.xml",
     "humanoid_body.xml",
+    "model.xml",
     "mug.obj",
     "mug.png",
     "mug.xml",

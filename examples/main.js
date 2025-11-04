@@ -20,9 +20,8 @@ export class MuJoCoDemo {
     this.mujoco = mujoco;
 
     // Load in the state from XML
-    this.model      = new mujoco.Model("/working/" + initialScene);
-    this.state      = new mujoco.State(this.model);
-    this.simulation = new mujoco.Simulation(this.model, this.state);
+    this.model = mujoco.MjModel.loadFromXML("/working/" + initialScene);
+    this.data  = new mujoco.MjData(this.model);
 
     // Define Random State Variables
     this.params = { scene: initialScene, paused: false, help: false, ctrlnoiserate: 0.0, ctrlnoisestd: 0.0, keyframeNumber: 0 };
@@ -46,15 +45,39 @@ export class MuJoCoDemo {
     this.scene.background = new THREE.Color(0.15, 0.25, 0.35);
     this.scene.fog = new THREE.Fog(this.scene.background, 15, 25.5 );
 
-    this.ambientLight = new THREE.AmbientLight( 0xffffff, 0.1 );
+    this.ambientLight = new THREE.AmbientLight( 0xffffff, 0.1 * 3.14 );
     this.ambientLight.name = 'AmbientLight';
     this.scene.add( this.ambientLight );
 
+    this.spotlight = new THREE.SpotLight();
+    this.spotlight.angle = 1.11;
+    this.spotlight.distance = 10000;
+    this.spotlight.penumbra = 0.5;
+    this.spotlight.castShadow = true; // default false
+    this.spotlight.intensity = this.spotlight.intensity * 3.14 * 10.0;
+    this.spotlight.shadow.mapSize.width = 1024; // default
+    this.spotlight.shadow.mapSize.height = 1024; // default
+    this.spotlight.shadow.camera.near = 0.1; // default
+    this.spotlight.shadow.camera.far = 100; // default
+    this.spotlight.position.set(0, 3, 3);
+    const targetObject = new THREE.Object3D();
+    this.scene.add(targetObject);
+    this.spotlight.target = targetObject;
+    targetObject.position.set(0, 1, 0);
+    this.scene.add( this.spotlight );
+
     this.renderer = new THREE.WebGLRenderer( { antialias: true } );
-    this.renderer.setPixelRatio( window.devicePixelRatio );
+    this.renderer.setPixelRatio(1.0);////window.devicePixelRatio );
     this.renderer.setSize( window.innerWidth, window.innerHeight );
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
+    THREE.ColorManagement.enabled = false;
+    this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+    //this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+    //this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    //this.renderer.toneMappingExposure = 2.0;
+    this.renderer.useLegacyLights = true;
+
     this.renderer.setAnimationLoop( this.render.bind(this) );
 
     this.container.appendChild( this.renderer.domElement );
@@ -79,7 +102,7 @@ export class MuJoCoDemo {
     await downloadExampleScenesFolder(mujoco);
 
     // Initialize the three.js Scene using the .xml Model in initialScene
-    [this.model, this.state, this.simulation, this.bodies, this.lights] =  
+    [this.model, this.data, this.bodies, this.lights] =
       await loadSceneFromURL(mujoco, initialScene, this);
 
     this.gui = new GUI();
@@ -96,7 +119,7 @@ export class MuJoCoDemo {
     this.controls.update();
 
     if (!this.params["paused"]) {
-      let timestep = this.model.getOptions().timestep;
+      let timestep = this.model.opt.timestep;
       if (timeMS - this.mujoco_time > 35.0) { this.mujoco_time = timeMS; }
       while (this.mujoco_time < timeMS) {
 
@@ -104,7 +127,7 @@ export class MuJoCoDemo {
         if (this.params["ctrlnoisestd"] > 0.0) {
           let rate  = Math.exp(-timestep / Math.max(1e-10, this.params["ctrlnoiserate"]));
           let scale = this.params["ctrlnoisestd"] * Math.sqrt(1 - rate * rate);
-          let currentCtrl = this.simulation.ctrl;
+          let currentCtrl = this.data.ctrl;
           for (let i = 0; i < currentCtrl.length; i++) {
             currentCtrl[i] = rate * currentCtrl[i] + scale * standardNormal();
             this.params["Actuator " + i] = currentCtrl[i];
@@ -112,13 +135,13 @@ export class MuJoCoDemo {
         }
 
         // Clear old perturbations, apply new ones.
-        for (let i = 0; i < this.simulation.qfrc_applied.length; i++) { this.simulation.qfrc_applied[i] = 0.0; }
+        for (let i = 0; i < this.data.qfrc_applied.length; i++) { this.data.qfrc_applied[i] = 0.0; }
         let dragged = this.dragStateManager.physicsObject;
         if (dragged && dragged.bodyID) {
           for (let b = 0; b < this.model.nbody; b++) {
             if (this.bodies[b]) {
-              getPosition  (this.simulation.xpos , b, this.bodies[b].position);
-              getQuaternion(this.simulation.xquat, b, this.bodies[b].quaternion);
+              getPosition  (this.data.xpos , b, this.bodies[b].position);
+              getQuaternion(this.data.xquat, b, this.bodies[b].quaternion);
               this.bodies[b].updateWorldMatrix();
             }
           }
@@ -126,12 +149,12 @@ export class MuJoCoDemo {
           this.dragStateManager.update(); // Update the world-space force origin
           let force = toMujocoPos(this.dragStateManager.currentWorld.clone().sub(this.dragStateManager.worldHit).multiplyScalar(this.model.body_mass[bodyID] * 250));
           let point = toMujocoPos(this.dragStateManager.worldHit.clone());
-          this.simulation.applyForce(force.x, force.y, force.z, 0, 0, 0, point.x, point.y, point.z, bodyID);
+          mujoco.mj_applyFT(this.model, this.data, [force.x, force.y, force.z], [0, 0, 0], [point.x, point.y, point.z], bodyID, this.data.qfrc_applied);
 
           // TODO: Apply pose perturbations (mocap bodies only).
         }
 
-        this.simulation.step();
+        mujoco.mj_step(this.model, this.data);
 
         this.mujoco_time += timestep * 1000.0;
       }
@@ -141,8 +164,8 @@ export class MuJoCoDemo {
       let dragged = this.dragStateManager.physicsObject;
       if (dragged && dragged.bodyID) {
         let b = dragged.bodyID;
-        getPosition  (this.simulation.xpos , b, this.tmpVec , false); // Get raw coordinate from MuJoCo
-        getQuaternion(this.simulation.xquat, b, this.tmpQuat, false); // Get raw coordinate from MuJoCo
+        getPosition  (this.data.xpos , b, this.tmpVec , false); // Get raw coordinate from MuJoCo
+        getQuaternion(this.data.xquat, b, this.tmpQuat, false); // Get raw coordinate from MuJoCo
 
         let offset = toMujocoPos(this.dragStateManager.currentWorld.clone()
           .sub(this.dragStateManager.worldHit).multiplyScalar(0.3));
@@ -150,7 +173,7 @@ export class MuJoCoDemo {
           // Set the root body's mocap position...
           console.log("Trying to move mocap body", b);
           let addr = this.model.body_mocapid[b] * 3;
-          let pos  = this.simulation.mocap_pos;
+          let pos  = this.data.mocap_pos;
           pos[addr+0] += offset.x;
           pos[addr+1] += offset.y;
           pos[addr+2] += offset.z;
@@ -158,7 +181,7 @@ export class MuJoCoDemo {
           // Set the root body's position directly...
           let root = this.model.body_rootid[b];
           let addr = this.model.jnt_qposadr[this.model.body_jntadr[root]];
-          let pos  = this.simulation.qpos;
+          let pos  = this.data.qpos;
           pos[addr+0] += offset.x;
           pos[addr+1] += offset.y;
           pos[addr+2] += offset.z;
@@ -168,21 +191,21 @@ export class MuJoCoDemo {
           //let xq = pos[addr + 3], yq = pos[addr + 4], zq = pos[addr + 5], wq = pos[addr + 6];
 
           //// Clear old perturbations, apply new ones.
-          //for (let i = 0; i < this.simulation.qfrc_applied().length; i++) { this.simulation.qfrc_applied()[i] = 0.0; }
-          //for (let bi = 0; bi < this.model.nbody(); bi++) {
+          //for (let i = 0; i < this.data.qfrc_applied.length; i++) { this.data.qfrc_applied[i] = 0.0; }
+          //for (let bi = 0; bi < this.model.nbody; bi++) {
           //  if (this.bodies[b]) {
-          //    getPosition  (this.simulation.xpos (), bi, this.bodies[bi].position);
-          //    getQuaternion(this.simulation.xquat(), bi, this.bodies[bi].quaternion);
+          //    getPosition  (this.data.xpos, bi, this.bodies[bi].position);
+          //    getQuaternion(this.data.xquat, bi, this.bodies[bi].quaternion);
           //    this.bodies[bi].updateWorldMatrix();
           //  }
           //}
           ////dragStateManager.update(); // Update the world-space force origin
           //let force = toMujocoPos(this.dragStateManager.currentWorld.clone()
-          //  .sub(this.dragStateManager.worldHit).multiplyScalar(this.model.body_mass()[b] * 0.01));
+          //  .sub(this.dragStateManager.worldHit).multiplyScalar(this.model.body_mass[b] * 0.01));
           //let point = toMujocoPos(this.dragStateManager.worldHit.clone());
           //// This force is dumped into xrfc_applied
-          //this.simulation.applyForce(force.x, force.y, force.z, 0, 0, 0, point.x, point.y, point.z, b);
-          //this.simulation.integratePos(this.simulation.qpos(), this.simulation.qfrc_applied(), 1);
+          //mujoco.mj_applyFT(this.model, this.data, [force.x, force.y, force.z], [0, 0, 0], [point.x, point.y, point.z], b, this.data.qfrc_applied);
+          //mujoco.mj_integratePos(this.model, this.data.qpos, this.data.qfrc_applied, 1);
 
           //// Add extra drag to the root body
           //pos[addr + 0] = x  + (pos[addr + 0] - x ) * 0.1;
@@ -197,14 +220,14 @@ export class MuJoCoDemo {
         }
       }
 
-      this.simulation.forward();
+      mujoco.mj_forward(this.model, this.data);
     }
 
     // Update body transforms.
     for (let b = 0; b < this.model.nbody; b++) {
       if (this.bodies[b]) {
-        getPosition  (this.simulation.xpos , b, this.bodies[b].position);
-        getQuaternion(this.simulation.xquat, b, this.bodies[b].quaternion);
+        getPosition  (this.data.xpos , b, this.bodies[b].position);
+        getQuaternion(this.data.xquat, b, this.bodies[b].quaternion);
         this.bodies[b].updateWorldMatrix();
       }
     }
@@ -212,31 +235,32 @@ export class MuJoCoDemo {
     // Update light transforms.
     for (let l = 0; l < this.model.nlight; l++) {
       if (this.lights[l]) {
-        getPosition(this.simulation.light_xpos, l, this.lights[l].position);
-        getPosition(this.simulation.light_xdir, l, this.tmpVec);
+        getPosition(this.data.light_xpos, l, this.lights[l].position);
+        getPosition(this.data.light_xdir, l, this.tmpVec);
         this.lights[l].lookAt(this.tmpVec.add(this.lights[l].position));
       }
     }
 
     // Update tendon transforms.
+    let identityQuat = new THREE.Quaternion();
     let numWraps = 0;
     if (this.mujocoRoot && this.mujocoRoot.cylinders) {
       let mat = new THREE.Matrix4();
       for (let t = 0; t < this.model.ntendon; t++) {
-        let startW = this.simulation.ten_wrapadr[t];
+        let startW = this.data.ten_wrapadr[t];
         let r = this.model.tendon_width[t];
-        for (let w = startW; w < startW + this.simulation.ten_wrapnum[t] -1 ; w++) {
-          let tendonStart = getPosition(this.simulation.wrap_xpos, w    , new THREE.Vector3());
-          let tendonEnd   = getPosition(this.simulation.wrap_xpos, w + 1, new THREE.Vector3());
+        for (let w = startW; w < startW + this.data.ten_wrapnum[t] -1 ; w++) {
+          let tendonStart = getPosition(this.data.wrap_xpos, w    , new THREE.Vector3());
+          let tendonEnd   = getPosition(this.data.wrap_xpos, w + 1, new THREE.Vector3());
           let tendonAvg   = new THREE.Vector3().addVectors(tendonStart, tendonEnd).multiplyScalar(0.5);
 
           let validStart = tendonStart.length() > 0.01;
           let validEnd   = tendonEnd  .length() > 0.01;
 
-          if (validStart) { this.mujocoRoot.spheres.setMatrixAt(numWraps    , mat.compose(tendonStart, new THREE.Quaternion(), new THREE.Vector3(r, r, r))); }
-          if (validEnd  ) { this.mujocoRoot.spheres.setMatrixAt(numWraps + 1, mat.compose(tendonEnd  , new THREE.Quaternion(), new THREE.Vector3(r, r, r))); }
+          if (validStart) { this.mujocoRoot.spheres.setMatrixAt(numWraps    , mat.compose(tendonStart, identityQuat, new THREE.Vector3(r, r, r))); }
+          if (validEnd  ) { this.mujocoRoot.spheres.setMatrixAt(numWraps + 1, mat.compose(tendonEnd  , identityQuat, new THREE.Vector3(r, r, r))); }
           if (validStart && validEnd) {
-            mat.compose(tendonAvg, new THREE.Quaternion().setFromUnitVectors(
+            mat.compose(tendonAvg, identityQuat.setFromUnitVectors(
               new THREE.Vector3(0, 1, 0), tendonEnd.clone().sub(tendonStart).normalize()),
               new THREE.Vector3(r, tendonStart.distanceTo(tendonEnd), r));
             this.mujocoRoot.cylinders.setMatrixAt(numWraps, mat);
@@ -244,8 +268,23 @@ export class MuJoCoDemo {
           }
         }
       }
+
+      let curFlexSphereInd = numWraps;
+      let tempvertPos = new THREE.Vector3();
+      let tempvertRad = new THREE.Vector3();
+      for (let i = 0; i < this.model.nflex; i++) {
+        for(let j = 0; j < this.model.flex_vertnum[i]; j++) {
+          let vertIndex = this.model.flex_vertadr[i] + j;
+          getPosition(this.data.flexvert_xpos, vertIndex, tempvertPos);
+          let r   = 0.01;
+          mat.compose(tempvertPos, identityQuat, tempvertRad.set(r, r, r));
+
+          this.mujocoRoot.spheres.setMatrixAt(curFlexSphereInd, mat);
+          curFlexSphereInd++;
+        }
+      }
       this.mujocoRoot.cylinders.count = numWraps;
-      this.mujocoRoot.spheres  .count = numWraps > 0 ? numWraps + 1: 0;
+      this.mujocoRoot.spheres  .count = curFlexSphereInd;
       this.mujocoRoot.cylinders.instanceMatrix.needsUpdate = true;
       this.mujocoRoot.spheres  .instanceMatrix.needsUpdate = true;
     }
