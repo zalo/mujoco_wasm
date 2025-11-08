@@ -1,13 +1,13 @@
 {
   "name": "mujoco_wasm",
-  "version": "0.0.2",
+  "version": "3.3.8",
   "description": "Run MuJoCo simulations in browser",
-  "main": "dist/mujoco_wasm.js",
+  "main": "src/main.js",
   "directories": {
     "lib": "lib"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "esbuild ./src/main.js --bundle --sourcemap --format=esm --outdir=./build --platform=node"
   },
   "repository": {
     "type": "git",
@@ -24,6 +24,8 @@
   },
   "homepage": "https://github.com/zalo/mujoco_wasm#readme",
   "dependencies": {
+    "esbuild": "^0.25.12",
+    "mujoco-js": "^0.0.7",
     "three": "^0.181.0"
   }
 }
