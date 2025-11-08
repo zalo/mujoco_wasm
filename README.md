@@ -24,6 +24,10 @@ This project used to be a WASM compilation and set of javascript bindings for Mu
 
 ### [See a more Advanced Example Here](https://kzakka.com/robopianist/)
 
+## Build
+
+Simply ensure `npm` is installed and run `npm install` to pull three.js and MuJoCo's Official WASM bindings.
+
 ## JavaScript API
 
 ```javascript

@@ -586,7 +586,7 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     return [model, data, bodies, lights];
 }
 
-/** Downloads the scenes/examples folder to MuJoCo's virtual filesystem
+/** Downloads the scenes/assets folder to MuJoCo's virtual filesystem
  * @param {mujoco} mujoco */
 export async function downloadExampleScenesFolder(mujoco) {
   let allFiles = [
@@ -643,7 +643,7 @@ export async function downloadExampleScenesFolder(mujoco) {
     "model_with_tendon.xml",
   ];
 
-  let requests = allFiles.map((url) => fetch("./examples/scenes/" + url));
+  let requests = allFiles.map((url) => fetch("./assets/scenes/" + url));
   let responses = await Promise.all(requests);
   for (let i = 0; i < responses.length; i++) {
       let split = allFiles[i].split("/");
