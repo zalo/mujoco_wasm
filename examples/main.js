@@ -4,7 +4,7 @@ import { GUI              } from '../node_modules/three/examples/jsm/libs/lil-gu
 import { OrbitControls    } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { DragStateManager } from './utils/DragStateManager.js';
 import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
-import   load_mujoco        from '../dist/mujoco_wasm.js';
+import   load_mujoco        from '../node_modules/mujoco-js/dist/mujoco_wasm.js';
 
 // Load the MuJoCo Module
 const mujoco = await load_mujoco();

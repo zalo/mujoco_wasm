@@ -1,8 +1,8 @@
 {
   "name": "mujoco_wasm",
-  "version": "0.0.2",
+  "version": "3.3.8",
   "description": "Run MuJoCo simulations in browser",
-  "main": "dist/mujoco_wasm.js",
+  "main": "examples/main.js",
   "directories": {
     "lib": "lib"
   },
@@ -24,6 +24,7 @@
   },
   "homepage": "https://github.com/zalo/mujoco_wasm#readme",
   "dependencies": {
+    "mujoco-js": "^0.0.7",
     "three": "^0.181.0"
   }
 }
