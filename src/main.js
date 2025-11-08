@@ -3,7 +3,7 @@ import * as THREE           from 'three';
 import { GUI              } from '../node_modules/three/examples/jsm/libs/lil-gui.module.min.js';
 import { OrbitControls    } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { DragStateManager } from './utils/DragStateManager.js';
-import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
+import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, drawTendonsAndFlex, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
 import   load_mujoco        from '../node_modules/mujoco-js/dist/mujoco_wasm.js';
 
 // Load the MuJoCo Module
@@ -185,38 +185,6 @@ export class MuJoCoDemo {
           pos[addr+0] += offset.x;
           pos[addr+1] += offset.y;
           pos[addr+2] += offset.z;
-
-          //// Save the original root body position
-          //let x  = pos[addr + 0], y  = pos[addr + 1], z  = pos[addr + 2];
-          //let xq = pos[addr + 3], yq = pos[addr + 4], zq = pos[addr + 5], wq = pos[addr + 6];
-
-          //// Clear old perturbations, apply new ones.
-          //for (let i = 0; i < this.data.qfrc_applied.length; i++) { this.data.qfrc_applied[i] = 0.0; }
-          //for (let bi = 0; bi < this.model.nbody; bi++) {
-          //  if (this.bodies[b]) {
-          //    getPosition  (this.data.xpos, bi, this.bodies[bi].position);
-          //    getQuaternion(this.data.xquat, bi, this.bodies[bi].quaternion);
-          //    this.bodies[bi].updateWorldMatrix();
-          //  }
-          //}
-          ////dragStateManager.update(); // Update the world-space force origin
-          //let force = toMujocoPos(this.dragStateManager.currentWorld.clone()
-          //  .sub(this.dragStateManager.worldHit).multiplyScalar(this.model.body_mass[b] * 0.01));
-          //let point = toMujocoPos(this.dragStateManager.worldHit.clone());
-          //// This force is dumped into xrfc_applied
-          //mujoco.mj_applyFT(this.model, this.data, [force.x, force.y, force.z], [0, 0, 0], [point.x, point.y, point.z], b, this.data.qfrc_applied);
-          //mujoco.mj_integratePos(this.model, this.data.qpos, this.data.qfrc_applied, 1);
-
-          //// Add extra drag to the root body
-          //pos[addr + 0] = x  + (pos[addr + 0] - x ) * 0.1;
-          //pos[addr + 1] = y  + (pos[addr + 1] - y ) * 0.1;
-          //pos[addr + 2] = z  + (pos[addr + 2] - z ) * 0.1;
-          //pos[addr + 3] = xq + (pos[addr + 3] - xq) * 0.1;
-          //pos[addr + 4] = yq + (pos[addr + 4] - yq) * 0.1;
-          //pos[addr + 5] = zq + (pos[addr + 5] - zq) * 0.1;
-          //pos[addr + 6] = wq + (pos[addr + 6] - wq) * 0.1;
-
-
         }
       }
 
@@ -241,53 +209,8 @@ export class MuJoCoDemo {
       }
     }
 
-    // Update tendon transforms.
-    let identityQuat = new THREE.Quaternion();
-    let numWraps = 0;
-    if (this.mujocoRoot && this.mujocoRoot.cylinders) {
-      let mat = new THREE.Matrix4();
-      for (let t = 0; t < this.model.ntendon; t++) {
-        let startW = this.data.ten_wrapadr[t];
-        let r = this.model.tendon_width[t];
-        for (let w = startW; w < startW + this.data.ten_wrapnum[t] -1 ; w++) {
-          let tendonStart = getPosition(this.data.wrap_xpos, w    , new THREE.Vector3());
-          let tendonEnd   = getPosition(this.data.wrap_xpos, w + 1, new THREE.Vector3());
-          let tendonAvg   = new THREE.Vector3().addVectors(tendonStart, tendonEnd).multiplyScalar(0.5);
-
-          let validStart = tendonStart.length() > 0.01;
-          let validEnd   = tendonEnd  .length() > 0.01;
-
-          if (validStart) { this.mujocoRoot.spheres.setMatrixAt(numWraps    , mat.compose(tendonStart, identityQuat, new THREE.Vector3(r, r, r))); }
-          if (validEnd  ) { this.mujocoRoot.spheres.setMatrixAt(numWraps + 1, mat.compose(tendonEnd  , identityQuat, new THREE.Vector3(r, r, r))); }
-          if (validStart && validEnd) {
-            mat.compose(tendonAvg, identityQuat.setFromUnitVectors(
-              new THREE.Vector3(0, 1, 0), tendonEnd.clone().sub(tendonStart).normalize()),
-              new THREE.Vector3(r, tendonStart.distanceTo(tendonEnd), r));
-            this.mujocoRoot.cylinders.setMatrixAt(numWraps, mat);
-            numWraps++;
-          }
-        }
-      }
-
-      let curFlexSphereInd = numWraps;
-      let tempvertPos = new THREE.Vector3();
-      let tempvertRad = new THREE.Vector3();
-      for (let i = 0; i < this.model.nflex; i++) {
-        for(let j = 0; j < this.model.flex_vertnum[i]; j++) {
-          let vertIndex = this.model.flex_vertadr[i] + j;
-          getPosition(this.data.flexvert_xpos, vertIndex, tempvertPos);
-          let r   = 0.01;
-          mat.compose(tempvertPos, identityQuat, tempvertRad.set(r, r, r));
-
-          this.mujocoRoot.spheres.setMatrixAt(curFlexSphereInd, mat);
-          curFlexSphereInd++;
-        }
-      }
-      this.mujocoRoot.cylinders.count = numWraps;
-      this.mujocoRoot.spheres  .count = curFlexSphereInd;
-      this.mujocoRoot.cylinders.instanceMatrix.needsUpdate = true;
-      this.mujocoRoot.spheres  .instanceMatrix.needsUpdate = true;
-    }
+    // Draw Tendons and Flex verts
+    drawTendonsAndFlex(this.mujocoRoot, this.model, this.data);
 
     // Render!
     this.renderer.render( this.scene, this.camera );

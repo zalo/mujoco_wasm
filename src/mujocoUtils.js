@@ -586,6 +586,56 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     return [model, data, bodies, lights];
 }
 
+export function drawTendonsAndFlex(mujocoRoot, model, data) {
+  // Update tendon transforms.
+  let identityQuat = new THREE.Quaternion();
+  let numWraps = 0;
+  if (mujocoRoot && mujocoRoot.cylinders) {
+    let mat = new THREE.Matrix4();
+    for (let t = 0; t < model.ntendon; t++) {
+      let startW = data.ten_wrapadr[t];
+      let r = model.tendon_width[t];
+      for (let w = startW; w < startW + data.ten_wrapnum[t] -1 ; w++) {
+        let tendonStart = getPosition(data.wrap_xpos, w    , new THREE.Vector3());
+        let tendonEnd   = getPosition(data.wrap_xpos, w + 1, new THREE.Vector3());
+        let tendonAvg   = new THREE.Vector3().addVectors(tendonStart, tendonEnd).multiplyScalar(0.5);
+
+        let validStart = tendonStart.length() > 0.01;
+        let validEnd   = tendonEnd  .length() > 0.01;
+
+        if (validStart) { mujocoRoot.spheres.setMatrixAt(numWraps    , mat.compose(tendonStart, identityQuat, new THREE.Vector3(r, r, r))); }
+        if (validEnd  ) { mujocoRoot.spheres.setMatrixAt(numWraps + 1, mat.compose(tendonEnd  , identityQuat, new THREE.Vector3(r, r, r))); }
+        if (validStart && validEnd) {
+          mat.compose(tendonAvg, identityQuat.setFromUnitVectors(
+            new THREE.Vector3(0, 1, 0), tendonEnd.clone().sub(tendonStart).normalize()),
+            new THREE.Vector3(r, tendonStart.distanceTo(tendonEnd), r));
+          mujocoRoot.cylinders.setMatrixAt(numWraps, mat);
+          numWraps++;
+        }
+      }
+    }
+
+    let curFlexSphereInd = numWraps;
+    let tempvertPos = new THREE.Vector3();
+    let tempvertRad = new THREE.Vector3();
+    for (let i = 0; i < model.nflex; i++) {
+      for(let j = 0; j < model.flex_vertnum[i]; j++) {
+        let vertIndex = model.flex_vertadr[i] + j;
+        getPosition(data.flexvert_xpos, vertIndex, tempvertPos);
+        let r   = 0.01;
+        mat.compose(tempvertPos, identityQuat, tempvertRad.set(r, r, r));
+
+        mujocoRoot.spheres.setMatrixAt(curFlexSphereInd, mat);
+        curFlexSphereInd++;
+      }
+    }
+    mujocoRoot.cylinders.count = numWraps;
+    mujocoRoot.spheres  .count = curFlexSphereInd;
+    mujocoRoot.cylinders.instanceMatrix.needsUpdate = true;
+    mujocoRoot.spheres  .instanceMatrix.needsUpdate = true;
+  }
+}
+
 /** Downloads the scenes/assets folder to MuJoCo's virtual filesystem
  * @param {mujoco} mujoco */
 export async function downloadExampleScenesFolder(mujoco) {
