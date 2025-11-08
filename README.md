@@ -28,6 +28,8 @@ This project used to be a WASM compilation and set of javascript bindings for Mu
 
 Simply ensure `npm` is installed and run `npm install` to pull three.js and MuJoCo's Official WASM bindings.
 
+To serve and run the index.html page while developing, use an HTTP Server.  I like to use [five-server](https://github.com/yandeu/five-server).
+
 ## JavaScript API
 
 ```javascript
@@ -39,7 +41,7 @@ const mujoco = await load_mujoco();
 // Set up Emscripten's Virtual File System
 mujoco.FS.mkdir('/working');
 mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
-mujoco.FS.writeFile("/working/humanoid.xml", await (await fetch("./examples/scenes/humanoid.xml")).text());
+mujoco.FS.writeFile("/working/humanoid.xml", await (await fetch("./assets/scenes/humanoid.xml")).text());
 
 // Load model and create data
 let model = mujoco.MjModel.loadFromXML("/working/humanoid.xml");
