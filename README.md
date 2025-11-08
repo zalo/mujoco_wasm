@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://zalo.github.io/mujoco_wasm/"><img src="./examples/MuJoCoWasmLogo.png" href></a>
+  <a href="https://zalo.github.io/mujoco_wasm/"><img src="./assets/MuJoCoWasmLogo.png" href></a>
 </p>
 <p align="left">
   <a href="https://github.com/zalo/mujoco_wasm/deployments/activity_log?environment=github-pages">
