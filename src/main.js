@@ -4,10 +4,15 @@ import { GUI              } from '../node_modules/three/examples/jsm/libs/lil-gu
 import { OrbitControls    } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { DragStateManager } from './utils/DragStateManager.js';
 import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, drawTendonsAndFlex, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
-import   load_mujoco        from '../node_modules/mujoco-js/dist/mujoco_wasm.js';
+import   load_mujoco        from '../node_modules/@mujoco/mujoco/mujoco.js';
 
 // Load the MuJoCo Module
-const mujoco = await load_mujoco();
+// The .wasm binary ships separately from the .js loader, so point Emscripten
+// at it explicitly; this resolves correctly from both ./src and the esbuild bundle.
+const mujoco = await load_mujoco({
+  locateFile: (path, prefix) => path.endsWith(".wasm") ?
+    new URL('../node_modules/@mujoco/mujoco/mujoco.wasm', import.meta.url).href : prefix + path
+});
 
 // Set up Emscripten's Virtual File System
 var initialScene = "humanoid.xml";
@@ -20,7 +25,7 @@ export class MuJoCoDemo {
     this.mujoco = mujoco;
 
     // Load in the state from XML
-    this.model = mujoco.MjModel.loadFromXML("/working/" + initialScene);
+    this.model = mujoco.MjModel.mj_loadXML("/working/" + initialScene);
     this.data  = new mujoco.MjData(this.model);
 
     // Define Random State Variables

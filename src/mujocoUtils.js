@@ -220,7 +220,10 @@ export function setupGUI(parentContext) {
     let act_range = model.actuator_ctrlrange;
     let actuatorGUIs = [];
     for (let i = 0; i < model.nu; i++) {
-      if (!model.actuator_ctrllimited[i]) { continue; }
+      // model.actuator_ctrllimited is unreadable in the 3.12.0 wasm bindings
+      // (boolean memory views are unregistered), so infer it from ctrlrange:
+      // with MJCF "auto" limits, an unspecified ctrlrange stays [0, 0].
+      if (act_range[2 * i] == 0 && act_range[2 * i + 1] == 0) { continue; }
       let name = textDecoder.decode(
         parentContext.model.names.subarray(
           parentContext.model.name_actuatoradr[i])).split(nullChar)[0];
@@ -267,15 +270,18 @@ export function setupGUI(parentContext) {
  * @param {MuJoCoDemo} parent The three.js Scene Object to add the MuJoCo model elements to
  */
 export async function loadSceneFromURL(mujoco, filename, parent) {
-    // Free the old data.
+    // Free the old model and data (wasm heap objects are not garbage-collected).
     if (parent.data != null) {
       parent.data.delete();
+      parent.data = null;
+    }
+    if (parent.model != null) {
+      parent.model.delete();
       parent.model = null;
-      parent.data  = null;
     }
 
     // Load in the state from XML.
-    parent.model = mujoco.MjModel.loadFromXML("/working/"+filename);
+    parent.model = mujoco.MjModel.mj_loadXML("/working/"+filename);
     parent.data  = new mujoco.MjData(parent.model);
 
     let model = parent.model;
@@ -459,7 +465,8 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         if (texId != -1) {
           let width    = model.tex_width [texId];
           let height   = model.tex_height[texId];
-          let offset   = model.tex_adr   [texId];
+          // tex_adr is an mjtSize (64-bit) field, exposed as a BigInt64Array.
+          let offset   = Number(model.tex_adr[texId]);
           let channels = model.tex_nchannel[texId];
           let texData  = model.tex_data;
           let rgbaArray = new Uint8Array(width * height * 4);

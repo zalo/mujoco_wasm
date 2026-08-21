@@ -16,7 +16,7 @@
 
 ## The Power of MuJoCo in your Browser.
 
-Load and Run MuJoCo 3.3.8 Models using JavaScript and the official MuJoCo WebAssembly Bindings.
+Load and Run MuJoCo 3.12.0 Models using JavaScript and the official MuJoCo WebAssembly Bindings.
 
 This project used to be a WASM compilation and set of javascript bindings for MuJoCo, but since Deepmind completed the official MuJoCo bindings, this project is now just a small demo suite in the `examples` folder.
 
@@ -33,7 +33,7 @@ To serve and run the index.html page while developing, use an HTTP Server.  I li
 ## JavaScript API
 
 ```javascript
-import load_mujoco from "./dist/mujoco_wasm.js";
+import load_mujoco from "@mujoco/mujoco";
 
 // Load the MuJoCo Module
 const mujoco = await load_mujoco();
@@ -44,7 +44,7 @@ mujoco.FS.mount(mujoco.MEMFS, { root: '.' }, '/working');
 mujoco.FS.writeFile("/working/humanoid.xml", await (await fetch("./assets/scenes/humanoid.xml")).text());
 
 // Load model and create data
-let model = mujoco.MjModel.loadFromXML("/working/humanoid.xml");
+let model = mujoco.MjModel.mj_loadXML("/working/humanoid.xml");
 let data  = new mujoco.MjData(model);
 
 // Access model properties directly
