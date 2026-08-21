@@ -4,10 +4,15 @@ import { GUI              } from '../node_modules/three/examples/jsm/libs/lil-gu
 import { OrbitControls    } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { DragStateManager } from './utils/DragStateManager.js';
 import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, drawTendonsAndFlex, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
-import   load_mujoco        from '../node_modules/mujoco-js/dist/mujoco_wasm.js';
+import   load_mujoco        from '../node_modules/@mujoco/mujoco/mujoco.js';
 
 // Load the MuJoCo Module
-const mujoco = await load_mujoco();
+// The .wasm binary ships separately from the .js loader, so point Emscripten
+// at it explicitly; this resolves correctly from both ./src and the esbuild bundle.
+const mujoco = await load_mujoco({
+  locateFile: (path, prefix) => path.endsWith(".wasm") ?
+    new URL('../node_modules/@mujoco/mujoco/mujoco.wasm', import.meta.url).href : prefix + path
+});
 
 // Set up Emscripten's Virtual File System
 var initialScene = "humanoid.xml";
@@ -20,7 +25,7 @@ export class MuJoCoDemo {
     this.mujoco = mujoco;
 
     // Load in the state from XML
-    this.model = mujoco.MjModel.loadFromXML("/working/" + initialScene);
+    this.model = mujoco.MjModel.mj_loadXML("/working/" + initialScene);
     this.data  = new mujoco.MjData(this.model);
 
     // Define Random State Variables
@@ -120,7 +125,9 @@ export class MuJoCoDemo {
 
     if (!this.params["paused"]) {
       let timestep = this.model.opt.timestep;
-      if (timeMS - this.mujoco_time > 35.0) { this.mujoco_time = timeMS; }
+      // Cap the physics catch-up debt at 35ms; clamping to (timeMS - 35) rather
+      // than timeMS ensures at least some steps run even after a slow frame.
+      if (timeMS - this.mujoco_time > 35.0) { this.mujoco_time = timeMS - 35.0; }
       while (this.mujoco_time < timeMS) {
 
         // Jitter the control state with gaussian random noise
