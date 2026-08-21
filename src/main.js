@@ -125,7 +125,9 @@ export class MuJoCoDemo {
 
     if (!this.params["paused"]) {
       let timestep = this.model.opt.timestep;
-      if (timeMS - this.mujoco_time > 35.0) { this.mujoco_time = timeMS; }
+      // Cap the physics catch-up debt at 35ms; clamping to (timeMS - 35) rather
+      // than timeMS ensures at least some steps run even after a slow frame.
+      if (timeMS - this.mujoco_time > 35.0) { this.mujoco_time = timeMS - 35.0; }
       while (this.mujoco_time < timeMS) {
 
         // Jitter the control state with gaussian random noise
