@@ -30,6 +30,10 @@ Simply ensure `npm` is installed and run `npm install` to pull three.js and MuJo
 
 To serve and run the index.html page while developing, use an HTTP Server.  I like to use [five-server](https://github.com/yandeu/five-server).
 
+## VR
+
+On a WebXR-capable device (served over HTTPS), an `ENTER VR` button appears at the bottom of the page. Entering VR places you two meters back from the scene at standing height while the simulation keeps running; exiting restores the desktop camera.
+
 ## JavaScript API
 
 ```javascript

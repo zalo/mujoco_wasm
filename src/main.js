@@ -2,6 +2,7 @@
 import * as THREE           from 'three';
 import { GUI              } from '../node_modules/three/examples/jsm/libs/lil-gui.module.min.js';
 import { OrbitControls    } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
+import { VRButton         } from '../node_modules/three/examples/jsm/webxr/VRButton.js';
 import { DragStateManager } from './utils/DragStateManager.js';
 import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, drawTendonsAndFlex, updateSleepState, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
 import   load_mujoco        from '../node_modules/@mujoco/mujoco/mujoco.js';
@@ -45,7 +46,14 @@ export class MuJoCoDemo {
     this.camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.001, 100 );
     this.camera.name = 'PerspectiveCamera';
     this.camera.position.set(2.0, 1.7, 1.7);
-    this.scene.add(this.camera);
+
+    // Camera rig: identity outside VR (so OrbitControls sees plain world
+    // coordinates), repositioned on session start so the viewer stands a
+    // couple of meters back from the scene instead of inside it.
+    this.cameraRig = new THREE.Group();
+    this.cameraRig.name = 'CameraRig';
+    this.cameraRig.add(this.camera);
+    this.scene.add(this.cameraRig);
 
     this.scene.background = new THREE.Color(0.15, 0.25, 0.35);
     this.scene.fog = new THREE.Fog(this.scene.background, 15, 25.5 );
@@ -78,14 +86,29 @@ export class MuJoCoDemo {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
     THREE.ColorManagement.enabled = false;
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-    //this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     //this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     //this.renderer.toneMappingExposure = 2.0;
-    this.renderer.useLegacyLights = true;
 
     this.renderer.setAnimationLoop( this.render.bind(this) );
 
     this.container.appendChild( this.renderer.domElement );
+
+    // WebXR / VR support. The button reads "VR NOT SUPPORTED" on devices
+    // without an immersive-vr runtime; entering VR hands camera pose to the
+    // headset while the rig places the viewer 2m back from the scene.
+    this.renderer.xr.enabled = true;
+    document.body.appendChild(VRButton.createButton(this.renderer));
+    this.renderer.xr.addEventListener('sessionstart', () => {
+      this.cameraRig.position.set(0, 0, 2.0);
+      this.cameraRig.rotation.set(0, 0, 0);
+    });
+    this.renderer.xr.addEventListener('sessionend', () => {
+      // Restore the desktop camera; the headset overwrote its transform.
+      this.cameraRig.position.set(0, 0, 0);
+      this.camera.position.set(2.0, 1.7, 1.7);
+      this.controls.target.set(0, 0.7, 0);
+      this.controls.update();
+    });
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.target.set(0, 0.7, 0);
@@ -121,7 +144,8 @@ export class MuJoCoDemo {
   }
 
   render(timeMS) {
-    this.controls.update();
+    // In VR the headset owns the camera pose.
+    if (!this.renderer.xr.isPresenting) { this.controls.update(); }
 
     if (!this.params["paused"]) {
       let timestep = this.model.opt.timestep;
@@ -229,3 +253,6 @@ export class MuJoCoDemo {
 
 let demo = new MuJoCoDemo();
 await demo.init();
+
+// Expose for debugging / scripting from the console.
+window.demo = demo;
