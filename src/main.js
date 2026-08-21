@@ -3,7 +3,7 @@ import * as THREE           from 'three';
 import { GUI              } from '../node_modules/three/examples/jsm/libs/lil-gui.module.min.js';
 import { OrbitControls    } from '../node_modules/three/examples/jsm/controls/OrbitControls.js';
 import { DragStateManager } from './utils/DragStateManager.js';
-import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, drawTendonsAndFlex, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
+import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, drawTendonsAndFlex, updateSleepState, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
 import   load_mujoco        from '../node_modules/@mujoco/mujoco/mujoco.js';
 
 // Load the MuJoCo Module
@@ -218,6 +218,9 @@ export class MuJoCoDemo {
 
     // Draw Tendons and Flex verts
     drawTendonsAndFlex(this.mujocoRoot, this.model, this.data);
+
+    // Tint sleeping bodies blue.
+    updateSleepState(this.bodies, this.model, this.data);
 
     // Render!
     this.renderer.render( this.scene, this.camera );

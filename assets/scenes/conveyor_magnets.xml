@@ -1,0 +1,78 @@
+<mujoco model="Conveyors and Magnets">
+  <!--
+    Playground for two MuJoCo 3.11 features:
+
+    - geom/surfacevel: static geoms whose *surface* moves. Friction drives
+      touching bodies along the surface motion, so conveyor belts and
+      turntables need no degrees of freedom at all.
+
+    - geom/adhesion (+ gap): contacts that pull back with up to the given
+      force before breaking. Combined with gap, the pull acts at a distance,
+      like a magnet. Try dragging a box off the sticky wall!
+  -->
+  <option timestep="0.005"/>
+
+  <visual>
+    <headlight diffuse=".4 .4 .4"/>
+  </visual>
+
+  <default>
+    <geom friction="0.8"/>
+    <default class="belt">
+      <!-- surface slides +x at 0.6 m/s -->
+      <geom type="box" rgba=".25 .3 .4 1" surfacevel="0.6 0 0 0 0 0"/>
+    </default>
+    <default class="turntable">
+      <!-- surface rotates about local z at 1.2 rad/s -->
+      <geom type="cylinder" rgba=".3 .4 .3 1" surfacevel="0 0 0 0 0 1.2"/>
+    </default>
+    <default class="sticky">
+      <!-- holds on with up to 25 N, reaches out 1 cm -->
+      <geom rgba=".85 .3 .3 1" adhesion="25" gap=".01" priority="1"/>
+    </default>
+    <default class="magnet">
+      <!-- weaker pull but a 4 cm reach: grabs passing objects -->
+      <geom rgba=".9 .5 .2 1" adhesion="8" gap=".04" priority="1"/>
+    </default>
+    <default class="cargo">
+      <geom type="box" size=".045 .045 .045" rgba=".8 .7 .3 1"/>
+    </default>
+  </default>
+
+  <worldbody>
+    <light pos="0 -1 3" dir="0 .3 -1" diffuse=".8 .8 .8"/>
+    <geom name="floor" type="plane" size="4 4 .1"/>
+
+    <!-- Conveyor belt running +x, ending at the sticky wall -->
+    <geom name="belt" class="belt" size="1.0 .22 .05" pos="0 0 .05"/>
+    <geom name="belt_rim_front" type="box" size="1.0 .015 .07" pos="0 -.235 .07" rgba=".2 .2 .25 1"/>
+    <geom name="belt_rim_back"  type="box" size="1.0 .015 .07" pos="0  .235 .07" rgba=".2 .2 .25 1"/>
+
+    <!-- Sticky wall at the end of the belt: cargo piles up against it -->
+    <geom name="sticky_wall" class="sticky" type="box" size=".02 .25 .18" pos="1.07 0 .18"/>
+
+    <!-- Overhead magnet bar: snatches tall cargo passing underneath -->
+    <geom name="magnet_bar" class="magnet" type="box" size=".06 .25 .02" pos=".45 0 .30"/>
+
+    <!-- Turntable with riders -->
+    <geom name="turntable" class="turntable" size=".45 .04" pos="0 .9 .04"/>
+
+    <!-- Cargo on the belt -->
+    <body name="cargo1" pos="-.85 .05 .16"><freejoint/><geom class="cargo"/></body>
+    <body name="cargo2" pos="-.55 -.08 .16"><freejoint/><geom class="cargo"/></body>
+    <body name="cargo3" pos="-.25 .02 .16"><freejoint/><geom class="cargo"/></body>
+    <!-- Tall stack: top box rides high enough for the magnet bar to grab -->
+    <body name="tall" pos=".05 0 .20">
+      <freejoint/>
+      <geom type="box" size=".04 .04 .10" rgba=".4 .7 .8 1"/>
+    </body>
+
+    <!-- Riders on the turntable (the sphere rolls itself off; boxes stay and orbit) -->
+    <body name="rider1" pos=".3 .9 .13"><freejoint/><geom type="box" size=".05 .05 .05" rgba=".7 .4 .7 1"/></body>
+    <body name="rider2" pos="-.25 1.05 .13"><freejoint/><geom class="cargo"/></body>
+    <body name="rider3" pos="0 .65 .13"><freejoint/><geom type="sphere" size=".04" rgba=".4 .6 .9 1"/></body>
+
+    <!-- A loose ball near the magnet bar's reach: gets yanked up -->
+    <body name="loose" pos=".45 0 .24"><freejoint/><geom type="sphere" size=".035" rgba=".9 .9 .9 1"/></body>
+  </worldbody>
+</mujoco>
