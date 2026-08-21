@@ -30,7 +30,9 @@ export function setupGUI(parentContext) {
     "Humanoid": "humanoid.xml", "Cassie": "agility_cassie/scene.xml",
     "Hammock": "hammock.xml", "Balloons": "balloons.xml", "Hand": "shadow_hand/scene_right.xml",
     "Mug": "mug.xml", "Tendon": "model_with_tendon.xml",
-    "Torture Model": "model.xml", "Flex": "flex.xml", "Car": "car.xml", 
+    "Torture Model": "model.xml", "Flex": "flex.xml", "Car": "car.xml",
+    "Conveyors & Magnets": "conveyor_magnets.xml", "Sleeping Islands": "sleep_pile.xml",
+    "xArm7 with Gripper": "ufactory_xarm7/scene.xml",
   }).name('Example Scene').onChange(reload);
 
   // Add a help menu.
@@ -593,6 +595,32 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     return [model, data, bodies, lights];
 }
 
+/** Tint sleeping bodies blue (island sleep, MuJoCo 3.4+). body_awake is
+ *  -1 for static bodies, 0 for sleeping, 1 for awake; scenes without
+ *  sleep enabled report all bodies awake, so this is a no-op for them.
+ * @param {Object.<number, THREE.Group>} bodies
+ * @param {mujoco.MjModel} model
+ * @param {mujoco.MjData} data */
+const sleepTint = new THREE.Color(0.35, 0.55, 1.0);
+export function updateSleepState(bodies, model, data) {
+  let body_awake = data.body_awake;
+  for (let b = 1; b < model.nbody; b++) {
+    let group = bodies[b];
+    if (!group) { continue; }
+    let asleep = body_awake[b] == 0;
+    if (group.asleep === asleep) { continue; }
+    group.asleep = asleep;
+    for (let child of group.children) {
+      if (!child.isMesh || !child.material || !child.material.color) { continue; }
+      if (!child.material.userData.awakeColor) {
+        child.material.userData.awakeColor = child.material.color.clone();
+      }
+      child.material.color.copy(child.material.userData.awakeColor);
+      if (asleep) { child.material.color.lerp(sleepTint, 0.65); }
+    }
+  }
+}
+
 export function drawTendonsAndFlex(mujocoRoot, model, data) {
   // Update tendon transforms.
   let identityQuat = new THREE.Quaternion();
@@ -668,6 +696,7 @@ export async function downloadExampleScenesFolder(mujoco) {
     "arm26.xml",
     "balloons.xml",
     "car.xml",
+    "conveyor_magnets.xml",
     "flex.xml",
     "hammock.xml",
     "humanoid.xml",
@@ -696,7 +725,26 @@ export async function downloadExampleScenesFolder(mujoco) {
     "shadow_hand/scene_left.xml",
     "shadow_hand/scene_right.xml",
     "simple.xml",
+    "sleep_pile.xml",
     "slider_crank.xml",
+    "ufactory_xarm7/assets/base_link.stl",
+    "ufactory_xarm7/assets/end_tool.stl",
+    "ufactory_xarm7/assets/left_finger.stl",
+    "ufactory_xarm7/assets/left_inner_knuckle.stl",
+    "ufactory_xarm7/assets/left_outer_knuckle.stl",
+    "ufactory_xarm7/assets/link1.stl",
+    "ufactory_xarm7/assets/link2.stl",
+    "ufactory_xarm7/assets/link3.stl",
+    "ufactory_xarm7/assets/link4.stl",
+    "ufactory_xarm7/assets/link5.stl",
+    "ufactory_xarm7/assets/link6.stl",
+    "ufactory_xarm7/assets/link7.stl",
+    "ufactory_xarm7/assets/link_base.stl",
+    "ufactory_xarm7/assets/right_finger.stl",
+    "ufactory_xarm7/assets/right_inner_knuckle.stl",
+    "ufactory_xarm7/assets/right_outer_knuckle.stl",
+    "ufactory_xarm7/scene.xml",
+    "ufactory_xarm7/xarm7.xml",
     "model_with_tendon.xml",
   ];
 

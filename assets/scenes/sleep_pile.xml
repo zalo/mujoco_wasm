@@ -1,0 +1,52 @@
+<mujoco model="Sleeping Islands">
+  <!--
+    Demo of island sleep (MuJoCo 3.4+): once a group of contacting bodies
+    comes to rest, its constraint island is put to sleep and costs nothing
+    to simulate. The demo tints sleeping bodies blue; drag one to wake just
+    its island while the rest of the pile stays dormant.
+  -->
+  <option timestep="0.005">
+    <flag island="enable" sleep="enable"/>
+  </option>
+
+  <visual>
+    <headlight diffuse=".4 .4 .4"/>
+  </visual>
+
+  <default>
+    <geom friction="0.9"/>
+    <default class="crate">
+      <geom type="box" size=".05 .05 .05" rgba=".8 .65 .35 1"/>
+    </default>
+    <default class="ball">
+      <geom type="sphere" size=".05" rgba=".5 .7 .5 1"/>
+    </default>
+  </default>
+
+  <worldbody>
+    <light pos="0 -1 3" dir="0 .3 -1" diffuse=".8 .8 .8"/>
+    <geom name="floor" type="plane" size="4 4 .1"/>
+
+    <!-- Three separate piles, so they sleep and wake as separate islands -->
+    <replicate count="3" offset="0 0 .11">
+      <replicate count="3" offset=".14 0 0">
+        <body pos="-.65 -.4 .06"><freejoint/><geom class="crate"/></body>
+      </replicate>
+    </replicate>
+
+    <replicate count="4" offset="0 0 .11">
+      <replicate count="2" offset=".14 0 0">
+        <body pos=".35 -.4 .06"><freejoint/><geom class="crate"/></body>
+      </replicate>
+    </replicate>
+
+    <replicate count="2" offset="0 .12 0">
+      <replicate count="4" offset=".12 0 0">
+        <body pos="-.2 .4 .3"><freejoint/><geom class="ball"/></body>
+      </replicate>
+    </replicate>
+
+    <!-- One lone crate, its own island -->
+    <body pos="0 -1.0 .3"><freejoint/><geom class="crate" rgba=".8 .4 .4 1"/></body>
+  </worldbody>
+</mujoco>
