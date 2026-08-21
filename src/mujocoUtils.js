@@ -32,6 +32,7 @@ export function setupGUI(parentContext) {
     "Mug": "mug.xml", "Tendon": "model_with_tendon.xml",
     "Torture Model": "model.xml", "Flex": "flex.xml", "Car": "car.xml",
     "Conveyors & Magnets": "conveyor_magnets.xml", "Sleeping Islands": "sleep_pile.xml",
+    "xArm7 with Gripper": "ufactory_xarm7/scene.xml",
   }).name('Example Scene').onChange(reload);
 
   // Add a help menu.
@@ -726,6 +727,24 @@ export async function downloadExampleScenesFolder(mujoco) {
     "simple.xml",
     "sleep_pile.xml",
     "slider_crank.xml",
+    "ufactory_xarm7/assets/base_link.stl",
+    "ufactory_xarm7/assets/end_tool.stl",
+    "ufactory_xarm7/assets/left_finger.stl",
+    "ufactory_xarm7/assets/left_inner_knuckle.stl",
+    "ufactory_xarm7/assets/left_outer_knuckle.stl",
+    "ufactory_xarm7/assets/link1.stl",
+    "ufactory_xarm7/assets/link2.stl",
+    "ufactory_xarm7/assets/link3.stl",
+    "ufactory_xarm7/assets/link4.stl",
+    "ufactory_xarm7/assets/link5.stl",
+    "ufactory_xarm7/assets/link6.stl",
+    "ufactory_xarm7/assets/link7.stl",
+    "ufactory_xarm7/assets/link_base.stl",
+    "ufactory_xarm7/assets/right_finger.stl",
+    "ufactory_xarm7/assets/right_inner_knuckle.stl",
+    "ufactory_xarm7/assets/right_outer_knuckle.stl",
+    "ufactory_xarm7/scene.xml",
+    "ufactory_xarm7/xarm7.xml",
     "model_with_tendon.xml",
   ];
 
