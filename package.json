@@ -9,7 +9,8 @@
   "scripts": {
     "build": "esbuild ./src/main.js --bundle --sourcemap --format=esm --outdir=./build --platform=node",
     "test": "node test_load.mjs",
-    "test:ik": "node ik_safety_test.mjs"
+    "test:ik": "node ik_safety_test.mjs",
+    "test:hand": "node hand_ik_test.mjs"
   },
   "repository": {
     "type": "git",

@@ -34,6 +34,7 @@ export function setupGUI(parentContext) {
     "Conveyors & Magnets": "conveyor_magnets.xml", "Sleeping Islands": "sleep_pile.xml",
     "xArm7 with Gripper": "ufactory_xarm7/scene.xml",
     "xArm7 Hand Teleop": "ufactory_xarm7/scene_teleop.xml",
+    "xArm7 Shadow Hand": "ufactory_xarm7/scene_hand_teleop.xml",
   }).name('Example Scene').onChange(reload);
 
   // Add a help menu.
@@ -274,11 +275,16 @@ export function setupGUI(parentContext) {
  */
 export async function loadSceneFromURL(mujoco, filename, parent) {
     // Free the old model and data (wasm heap objects are not garbage-collected).
-    // The IK solver holds a shadow MjData for the old model; free it first.
+    // The IK solvers hold shadow MjData for the old model; free them first.
     if (parent.ik != null) {
       parent.ik.dispose();
       parent.ik = null;
     }
+    if (parent.handRetarget != null) {
+      parent.handRetarget.dispose();
+      parent.handRetarget = null;
+    }
+    parent.teleopOrigin = null;
     if (parent.data != null) {
       parent.data.delete();
       parent.data = null;
@@ -308,8 +314,9 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
 
     // Detect hand-teleop scenes: a mocap body named "hand_target" is the IK
     // target that the VR hand drives; an actuator named "gripper" (optional)
-    // is driven by the pinch diameter; a site named "link_tcp" plus
-    // joint-transmission actuators enable differential-IK arm control.
+    // is driven by the pinch diameter; a TCP site plus joint-transmission
+    // actuators enable differential-IK arm control; five fingertip bodies
+    // enable fingertip retargeting for dexterous hands.
     parent.teleop = null;
     for (let b = 0; b < model.nbody; b++) {
       if (model.body_mocapid[b] >= 0 && decodeName(model.name_bodyadr[b]) == "hand_target") {
@@ -317,16 +324,50 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         for (let a = 0; a < model.nu; a++) {
           if (decodeName(model.name_actuatoradr[a]) == "gripper") { gripperActId = a; break; }
         }
+        // TCP site: "link_tcp" if present, else a (possibly attach-prefixed)
+        // palm "grasp_site".
         let tcpSiteId = -1;
         for (let s = 0; s < model.nsite; s++) {
-          if (decodeName(model.name_siteadr[s]) == "link_tcp") { tcpSiteId = s; break; }
+          let n = decodeName(model.name_siteadr[s]);
+          if (n == "link_tcp") { tcpSiteId = s; break; }
+          if (tcpSiteId < 0 && n.endsWith("grasp_site")) { tcpSiteId = s; }
         }
-        let hasArmActuators = false;
-        for (let a = 0; a < model.nu; a++) {
-          if (model.actuator_trntype[a] == 0) { hasArmActuators = true; break; } // mjTRN_JOINT
+        // Arm actuators: joint-transmission actuators on the kinematic chain
+        // from the world to the TCP site's body (this includes a mounted
+        // hand's wrist joints, and excludes its finger joints).
+        let armActIds = [], hand = null;
+        if (tcpSiteId >= 0) {
+          let chainJoints = new Set();
+          for (let p = model.site_bodyid[tcpSiteId]; p != 0; p = model.body_parentid[p]) {
+            for (let j = model.body_jntadr[p]; j < model.body_jntadr[p] + model.body_jntnum[p]; j++) {
+              chainJoints.add(j);
+            }
+          }
+          for (let a = 0; a < model.nu; a++) {
+            if (model.actuator_trntype[a] == 0 && chainJoints.has(model.actuator_trnid[a * 2])) {
+              armActIds.push(a); // mjTRN_JOINT on the chain
+            }
+          }
+          // Dexterous hand: fingertip distal bodies (Shadow Hand naming,
+          // thumb..pinky); its actuators are everything off the arm chain.
+          const tipSuffixes = ["thdistal", "ffdistal", "mfdistal", "rfdistal", "lfdistal"];
+          let tipBodyIds = tipSuffixes.map((suffix) => {
+            for (let tb = 0; tb < model.nbody; tb++) {
+              if (decodeName(model.name_bodyadr[tb]).endsWith(suffix)) { return tb; }
+            }
+            return -1;
+          });
+          if (tipBodyIds.every((id) => id >= 0)) {
+            let actIds = [];
+            for (let a = 0; a < model.nu; a++) {
+              if (!armActIds.includes(a) && a != gripperActId) { actIds.push(a); }
+            }
+            if (actIds.length > 0) { hand = { tipBodyIds: tipBodyIds, actIds: actIds }; }
+          }
         }
         parent.teleop = { bodyID: b, gripperActId: gripperActId,
-                          tcpSiteId: (hasArmActuators ? tcpSiteId : -1) };
+                          tcpSiteId: (armActIds.length > 0 ? tcpSiteId : -1),
+                          armActIds: armActIds, hand: hand };
         break;
       }
     }
@@ -802,7 +843,9 @@ export async function downloadExampleScenesFolder(mujoco) {
     "ufactory_xarm7/assets/right_outer_knuckle.stl",
     "ufactory_xarm7/scene.xml",
     "ufactory_xarm7/scene_teleop.xml",
+    "ufactory_xarm7/scene_hand_teleop.xml",
     "ufactory_xarm7/xarm7.xml",
+    "ufactory_xarm7/xarm7_hand.xml",
     "model_with_tendon.xml",
   ];
 

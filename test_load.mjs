@@ -28,6 +28,7 @@ const scenes = [
   "flex.xml", "hammock.xml", "humanoid.xml",
   "model.xml", "mug.xml", "scene.xml", "ufactory_xarm7/scene.xml",
   "ufactory_xarm7/scene_teleop.xml",
+  "ufactory_xarm7/scene_hand_teleop.xml",
   "shadow_hand/scene_right.xml",
   "shadow_hand/scene_left.xml", "simple.xml", "slider_crank.xml",
   "model_with_tendon.xml",

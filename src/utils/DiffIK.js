@@ -37,10 +37,14 @@ export class DiffIK {
     this.reachCenter = opts.reachCenter ?? [0, 0, 0.5];
     this.reachRadius = opts.reachRadius ?? 0.9;
 
-    // Arm joints, from actuators with a joint transmission (mjTRN_JOINT = 0).
-    this.armActIds = [];
-    for (let a = 0; a < model.nu; a++) {
-      if (model.actuator_trntype[a] == 0) { this.armActIds.push(a); }
+    // Arm actuators: explicit list from the caller (e.g. the joint chain
+    // from the world to the TCP site), else every joint-transmission
+    // actuator in the model (mjTRN_JOINT = 0).
+    this.armActIds = opts.armActIds ? [...opts.armActIds] : [];
+    if (this.armActIds.length == 0) {
+      for (let a = 0; a < model.nu; a++) {
+        if (model.actuator_trntype[a] == 0) { this.armActIds.push(a); }
+      }
     }
     this.armJointIds = this.armActIds.map((a) => model.actuator_trnid[2 * a]);
     this.armQposAdr  = this.armJointIds.map((j) => model.jnt_qposadr[j]);
@@ -154,7 +158,7 @@ export class DiffIK {
         A[i].push(s);
       }
     }
-    const y = solveSym6(A, err);
+    const y = solveLinear(A, err);
     const dq = new Array(n).fill(0);
     for (let k = 0; k < n; k++) {
       for (let i = 0; i < 6; i++) { dq[k] += J[i][k] * y[i]; }
@@ -167,7 +171,7 @@ export class DiffIK {
     for (let i = 0; i < 6; i++) {
       for (let k = 0; k < n; k++) { Jdqn[i] += J[i][k] * dqn[k]; }
     }
-    const y2 = solveSym6(A, Jdqn);
+    const y2 = solveLinear(A, Jdqn);
     for (let k = 0; k < n; k++) {
       let proj = 0;
       for (let i = 0; i < 6; i++) { proj += J[i][k] * y2[i]; }
@@ -231,9 +235,9 @@ export class DiffIK {
   }
 }
 
-/** Solve the 6x6 system A x = b by Gaussian elimination with pivoting. */
-function solveSym6(A, b) {
-  const n = 6, M = A.map((row, i) => [...row, b[i]]);
+/** Solve the n x n system A x = b by Gaussian elimination with pivoting. */
+export function solveLinear(A, b) {
+  const n = b.length, M = A.map((row, i) => [...row, b[i]]);
   for (let c = 0; c < n; c++) {
     let p = c;
     for (let r = c + 1; r < n; r++) { if (Math.abs(M[r][c]) > Math.abs(M[p][c])) { p = r; } }

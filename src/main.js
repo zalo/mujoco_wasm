@@ -6,6 +6,7 @@ import { VRButton         } from '../node_modules/three/examples/jsm/webxr/VRBut
 import { DragStateManager } from './utils/DragStateManager.js';
 import { XRInputManager    } from './utils/XRInputManager.js';
 import { DiffIK            } from './utils/DiffIK.js';
+import { HandRetarget      } from './utils/HandRetarget.js';
 import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, drawTendonsAndFlex, updateSleepState, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
 import   load_mujoco        from '../node_modules/@mujoco/mujoco/mujoco.js';
 
@@ -26,6 +27,11 @@ mujoco.FS.writeFile("/working/" + initialScene, await(await fetch("./assets/scen
 // Rotation of -90 degrees about x (in MuJoCo axes), aligning the teleoperated
 // gripper's +z (finger direction) with the hand's pointing direction.
 const teleopGripAlignment = new THREE.Quaternion(-Math.SQRT1_2, 0, 0, Math.SQRT1_2);
+
+// Rotation of 180 degrees about y, aligning the Shadow Hand's palm-site
+// frame (+z fingers, +x thumb side, -y palm) with the WebXR wrist frame
+// (-z fingers, -x thumb side, -y palm).
+const palmAlignment = new THREE.Quaternion(0, 1, 0, 0);
 
 export class MuJoCoDemo {
   constructor() {
@@ -108,6 +114,13 @@ export class MuJoCoDemo {
       // Stand closer in hand-teleop scenes so the robot is within arm's reach.
       this.cameraRig.position.set(0, 0, this.teleop ? 1.0 : 2.0);
       this.cameraRig.rotation.set(0, 0, 0);
+      // Recalibrate the delta-teleop origin, now and whenever the user
+      // recenters their headset (long-press the system button on Quest).
+      this.teleopOrigin = null;
+      const refSpace = this.renderer.xr.getReferenceSpace();
+      if (refSpace && refSpace.addEventListener) {
+        refSpace.addEventListener('reset', () => { this.teleopOrigin = null; });
+      }
     });
     this.renderer.xr.addEventListener('sessionend', () => {
       // Restore the desktop camera; the headset overwrote its transform.
@@ -133,9 +146,14 @@ export class MuJoCoDemo {
 
     // Initialize VR controller / hand-tracking input. `teleop` is set by
     // loadSceneFromURL when the scene has a "hand_target" mocap body; `ik`
-    // is created lazily for scenes that support actuator-driven IK.
+    // and `handRetarget` are created lazily for scenes that support
+    // actuator-driven IK. `teleopOrigin` is the delta-teleop calibration,
+    // captured when the hand is first tracked and cleared on session start
+    // and on headset recentering.
     this.teleop = null;
     this.ik = null;
+    this.handRetarget = null;
+    this.teleopOrigin = null;
     this.xrInput = new XRInputManager(this);
   }
 
@@ -155,6 +173,90 @@ export class MuJoCoDemo {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize( window.innerWidth, window.innerHeight );
+  }
+
+  /** Delta-teleop calibration: capture the user's wrist pose, mapping it to
+   *  the robot target's current position, and capture the neutral fingertip
+   *  layout (with per-finger human-to-robot scale factors) so fingertip
+   *  motion retargets as scaled deltas around this pose. */
+  captureTeleopOrigin(handPose, mocapId) {
+    const sid = this.teleop.tcpSiteId;
+    const sp = this.data.site_xpos, sm = this.data.site_xmat;
+    const invWrist = handPose.wristQuat.clone().invert();
+    const palmRoot = [0, 0.035, -0.09]; // approx. palm base in the palm-site frame
+    let tipNeutral = [], tipHome = [], scale = [];
+    for (let f = 0; f < 5; f++) {
+      const rel = handPose.tips[f].clone().sub(handPose.wristPos).applyQuaternion(invWrist);
+      const neutral = [-rel.x, rel.y, -rel.z]; // WebXR wrist frame -> palm-site axes
+      tipNeutral.push(neutral);
+      let home = [0, 0, 0];
+      if (this.teleop.hand) {
+        const tb = this.teleop.hand.tipBodyIds[f];
+        const d = [
+          this.data.xpos[(tb * 3) + 0] - sp[(sid * 3) + 0],
+          this.data.xpos[(tb * 3) + 1] - sp[(sid * 3) + 1],
+          this.data.xpos[(tb * 3) + 2] - sp[(sid * 3) + 2]];
+        home = [ // R^T * d (site_xmat is row-major local-to-world)
+          sm[(sid * 9) + 0] * d[0] + sm[(sid * 9) + 3] * d[1] + sm[(sid * 9) + 6] * d[2],
+          sm[(sid * 9) + 1] * d[0] + sm[(sid * 9) + 4] * d[1] + sm[(sid * 9) + 7] * d[2],
+          sm[(sid * 9) + 2] * d[0] + sm[(sid * 9) + 5] * d[1] + sm[(sid * 9) + 8] * d[2]];
+      }
+      tipHome.push(home);
+      const robotLen = Math.hypot(home[0] - palmRoot[0], home[1] - palmRoot[1], home[2] - palmRoot[2]);
+      const humanLen = Math.max(Math.hypot(neutral[0], neutral[1], neutral[2]), 0.02);
+      scale.push(Math.min(Math.max(robotLen / humanLen, 0.6), 1.6));
+    }
+    return {
+      wristPos: handPose.wristPos.clone(),
+      // Calibration maps the wrist onto the scene's HOME target (the mocap
+      // body's model position), so recentering always plants the middle of
+      // the arm's workspace at the user's current hand position.
+      targetPos: [
+        this.model.body_pos[(this.teleop.bodyID * 3) + 0],
+        this.model.body_pos[(this.teleop.bodyID * 3) + 1],
+        this.model.body_pos[(this.teleop.bodyID * 3) + 2]],
+      tipNeutral: tipNeutral, tipHome: tipHome, scale: scale,
+    };
+  }
+
+  /** Fingertip targets (MuJoCo world) for the dexterous hand: the user's
+   *  fingertip deltas from the calibration pose, expressed in the wrist
+   *  frame, scaled per finger, and re-rooted in the robot's palm frame. */
+  computeFingerTargets(handPose) {
+    const o = this.teleopOrigin, sid = this.teleop.tcpSiteId;
+    const sp = this.data.site_xpos, sm = this.data.site_xmat;
+    const invWrist = handPose.wristQuat.clone().invert();
+    const targets = [];
+    for (let f = 0; f < 5; f++) {
+      const rel = handPose.tips[f].clone().sub(handPose.wristPos).applyQuaternion(invWrist);
+      const local = [
+        o.tipHome[f][0] + o.scale[f] * ((-rel.x) - o.tipNeutral[f][0]),
+        o.tipHome[f][1] + o.scale[f] * (( rel.y) - o.tipNeutral[f][1]),
+        o.tipHome[f][2] + o.scale[f] * ((-rel.z) - o.tipNeutral[f][2])];
+      targets.push([
+        sp[(sid * 3) + 0] + sm[(sid * 9) + 0] * local[0] + sm[(sid * 9) + 1] * local[1] + sm[(sid * 9) + 2] * local[2],
+        sp[(sid * 3) + 1] + sm[(sid * 9) + 3] * local[0] + sm[(sid * 9) + 4] * local[1] + sm[(sid * 9) + 5] * local[2],
+        sp[(sid * 3) + 2] + sm[(sid * 9) + 6] * local[0] + sm[(sid * 9) + 7] * local[1] + sm[(sid * 9) + 8] * local[2]]);
+    }
+
+    // Pinch refinement (DexPilot-style): scaled delta retargeting alone
+    // leaves a residual thumb-index gap, so as the user's pinch closes
+    // below 4cm, blend the thumb and index targets toward a shared midpoint
+    // separated by exactly the human gap — making robot fingertips meet
+    // when the user's do.
+    const humanGap = handPose.tips[0].distanceTo(handPose.tips[1]);
+    if (humanGap < 0.04) {
+      const w = Math.min((0.04 - humanGap) / 0.02, 1.0);
+      const t0 = targets[0], t1 = targets[1];
+      const mid = [(t0[0] + t1[0]) / 2, (t0[1] + t1[1]) / 2, (t0[2] + t1[2]) / 2];
+      const len = Math.max(Math.hypot(t0[0] - t1[0], t0[1] - t1[1], t0[2] - t1[2]), 1e-6);
+      for (let r = 0; r < 3; r++) {
+        const dir = (t0[r] - t1[r]) / len;
+        t0[r] = t0[r] * (1 - w) + (mid[r] + dir * humanGap / 2) * w;
+        t1[r] = t1[r] * (1 - w) + (mid[r] - dir * humanGap / 2) * w;
+      }
+    }
+    return targets;
   }
 
   render(timeMS) {
@@ -177,31 +279,65 @@ export class MuJoCoDemo {
         let dt = Math.min((timeMS - (this.lastTeleopMS ?? timeMS)) / 1000.0, 0.1);
         this.lastTeleopMS = timeMS;
 
+        let handPose = null;
         if (this.renderer.xr.isPresenting) {
           let src = this.xrInput.getTeleopSource();
           if (src) {
-            let pos = toMujocoPos(src.position.clone());
-            // Rate-limit the target's travel so tracking jumps (entering VR,
-            // tracking reacquisition) sweep the arm smoothly instead of
-            // yanking it across the workspace; human-speed motion stays 1:1.
-            let maxStep = 1.5 * dt; // meters, at 1.5 m/s
-            this.tmpVec.set(
-              pos.x - this.data.mocap_pos[(mocapId * 3) + 0],
-              pos.y - this.data.mocap_pos[(mocapId * 3) + 1],
-              pos.z - this.data.mocap_pos[(mocapId * 3) + 2]);
-            if (this.tmpVec.length() > maxStep) { this.tmpVec.setLength(maxStep); }
-            this.data.mocap_pos[(mocapId * 3) + 0] += this.tmpVec.x;
-            this.data.mocap_pos[(mocapId * 3) + 1] += this.tmpVec.y;
-            this.data.mocap_pos[(mocapId * 3) + 2] += this.tmpVec.z;
-            // Quaternion vector parts map to MuJoCo axes like positions do
-            // ((x, y, z) -> (x, -z, y)); then rotate -90 degrees about local x
-            // so the gripper's +z (finger direction) points where the hand points.
-            this.tmpQuat.set(src.quaternion.x, -src.quaternion.z, src.quaternion.y, src.quaternion.w);
-            this.tmpQuat.multiply(teleopGripAlignment);
-            this.data.mocap_quat[(mocapId * 4) + 0] = this.tmpQuat.w;
-            this.data.mocap_quat[(mocapId * 4) + 1] = this.tmpQuat.x;
-            this.data.mocap_quat[(mocapId * 4) + 2] = this.tmpQuat.y;
-            this.data.mocap_quat[(mocapId * 4) + 3] = this.tmpQuat.z;
+            let pos = null;
+            if (this.teleop.hand && src.hand) {
+              // Dexterous-hand scenes track the wrist in DELTA mode: the
+              // wrist pose at calibration maps onto wherever the robot's
+              // target currently is, so the robot workspace lands inside
+              // the user's comfortable workspace regardless of where they
+              // stand. Recentering the headset recalibrates.
+              handPose = src.hand;
+              // Calibrate only after the hand has been tracked for a few
+              // frames: the first frames can carry a stale rig transform
+              // (session start) or tracking-acquisition glitches.
+              if (!this.teleopOrigin) {
+                this.teleopOriginCountdown = (this.teleopOriginCountdown ?? 15) - 1;
+                if (this.teleopOriginCountdown > 0) { handPose = null; }
+                else {
+                  this.teleopOrigin = this.captureTeleopOrigin(handPose, mocapId);
+                  this.teleopOriginCountdown = null;
+                }
+              }
+            }
+            if (this.teleop.hand && handPose && this.teleopOrigin) {
+              pos = toMujocoPos(handPose.wristPos.clone().sub(this.teleopOrigin.wristPos));
+              pos.x += this.teleopOrigin.targetPos[0];
+              pos.y += this.teleopOrigin.targetPos[1];
+              pos.z += this.teleopOrigin.targetPos[2];
+              // Wrist orientation -> palm-site orientation (absolute).
+              this.tmpQuat.set(handPose.wristQuat.x, -handPose.wristQuat.z, handPose.wristQuat.y, handPose.wristQuat.w);
+              this.tmpQuat.multiply(palmAlignment);
+            } else if (!this.teleop.hand) {
+              // Gripper scenes track the hand/controller position absolutely.
+              pos = toMujocoPos(src.position.clone());
+              // Quaternion vector parts map to MuJoCo axes like positions do
+              // ((x, y, z) -> (x, -z, y)); then rotate -90 degrees about local x
+              // so the gripper's +z (finger direction) points where the hand points.
+              this.tmpQuat.set(src.quaternion.x, -src.quaternion.z, src.quaternion.y, src.quaternion.w);
+              this.tmpQuat.multiply(teleopGripAlignment);
+            }
+            if (pos != null) {
+              // Rate-limit the target's travel so tracking jumps (entering VR,
+              // tracking reacquisition) sweep the arm smoothly instead of
+              // yanking it across the workspace; human-speed motion stays 1:1.
+              let maxStep = 1.5 * dt; // meters, at 1.5 m/s
+              this.tmpVec.set(
+                pos.x - this.data.mocap_pos[(mocapId * 3) + 0],
+                pos.y - this.data.mocap_pos[(mocapId * 3) + 1],
+                pos.z - this.data.mocap_pos[(mocapId * 3) + 2]);
+              if (this.tmpVec.length() > maxStep) { this.tmpVec.setLength(maxStep); }
+              this.data.mocap_pos[(mocapId * 3) + 0] += this.tmpVec.x;
+              this.data.mocap_pos[(mocapId * 3) + 1] += this.tmpVec.y;
+              this.data.mocap_pos[(mocapId * 3) + 2] += this.tmpVec.z;
+              this.data.mocap_quat[(mocapId * 4) + 0] = this.tmpQuat.w;
+              this.data.mocap_quat[(mocapId * 4) + 1] = this.tmpQuat.x;
+              this.data.mocap_quat[(mocapId * 4) + 2] = this.tmpQuat.y;
+              this.data.mocap_quat[(mocapId * 4) + 3] = this.tmpQuat.z;
+            }
             if (this.teleop.gripperActId >= 0) {
               let lo = this.model.actuator_ctrlrange[(this.teleop.gripperActId * 2) + 0];
               let hi = this.model.actuator_ctrlrange[(this.teleop.gripperActId * 2) + 1];
@@ -219,7 +355,8 @@ export class MuJoCoDemo {
         if (this.teleop.tcpSiteId >= 0) {
           if (!this.ik || this.ik.model != this.model) {
             if (this.ik) { this.ik.dispose(); }
-            this.ik = new DiffIK(mujoco, this.model, { siteId: this.teleop.tcpSiteId });
+            this.ik = new DiffIK(mujoco, this.model,
+              { siteId: this.teleop.tcpSiteId, armActIds: this.teleop.armActIds });
           }
           let target = [
             this.data.mocap_pos[(mocapId * 3) + 0],
@@ -232,11 +369,24 @@ export class MuJoCoDemo {
           this.data.mocap_pos[(mocapId * 3) + 2] = target[2];
           this.ik.step(this.data, target,
             [...this.data.mocap_quat.slice(mocapId * 4, (mocapId * 4) + 4)], dt);
+
+          // Fingertip retargeting: drive the dexterous hand's actuators so
+          // its fingertips track the user's, expressed in the palm frame.
+          if (this.teleop.hand && handPose && this.teleopOrigin) {
+            if (!this.handRetarget || this.handRetarget.model != this.model) {
+              if (this.handRetarget) { this.handRetarget.dispose(); }
+              this.handRetarget = new HandRetarget(mujoco, this.model, this.teleop.hand);
+            }
+            this.handRetarget.step(this.data, this.computeFingerTargets(handPose), dt);
+          }
+
           // Hook for streaming the safety-gated joint commands to real
-          // hardware: (armJointTargets: Float64Array, gripperCtrl: number).
+          // hardware: (armJointTargets: Float64Array, gripperCtrl: number,
+          // handActuatorTargets: Float64Array|null).
           if (this.onTeleopCommand) {
             this.onTeleopCommand(this.ik.lastCommand,
-              this.teleop.gripperActId >= 0 ? this.data.ctrl[this.teleop.gripperActId] : 0);
+              this.teleop.gripperActId >= 0 ? this.data.ctrl[this.teleop.gripperActId] : 0,
+              this.handRetarget ? this.handRetarget.lastCommand : null);
           }
         }
       }

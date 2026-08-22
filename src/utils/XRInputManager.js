@@ -115,6 +115,29 @@ export class XRInputManager {
       quaternion: slot.controller.getWorldQuaternion(new THREE.Quaternion()),
       aperture  : this.getPinchAperture(slot),
       trigger   : this.getTriggerValue(slot),
+      hand      : this.getHandPose(slot),
+    };
+  }
+
+  /** Full articulated-hand pose in three.js world space: wrist position and
+   *  orientation plus the five fingertips (thumb, index, middle, ring,
+   *  pinky). Null when hand tracking isn't available on this input. */
+  getHandPose(slot) {
+    const joints = slot.hand.joints;
+    if (!slot.inputSource || !slot.inputSource.hand || !joints) { return null; }
+    const wrist = joints['wrist'];
+    if (!wrist || !wrist.visible) { return null; }
+    const tipNames = ['thumb-tip', 'index-finger-tip', 'middle-finger-tip', 'ring-finger-tip', 'pinky-finger-tip'];
+    const tips = [];
+    for (const name of tipNames) {
+      const joint = joints[name];
+      if (!joint || !joint.visible) { return null; }
+      tips.push(joint.getWorldPosition(new THREE.Vector3()));
+    }
+    return {
+      wristPos : wrist.getWorldPosition(new THREE.Vector3()),
+      wristQuat: wrist.getWorldQuaternion(new THREE.Quaternion()),
+      tips     : tips,
     };
   }
 
