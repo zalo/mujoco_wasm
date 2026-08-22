@@ -32,7 +32,11 @@ To serve and run the index.html page while developing, use an HTTP Server.  I li
 
 ## VR
 
-On a WebXR-capable device (served over HTTPS), an `ENTER VR` button appears at the bottom of the page. Entering VR places you two meters back from the scene at standing height while the simulation keeps running; exiting restores the desktop camera.
+On a WebXR-capable device (served over HTTPS), an `ENTER VR` button appears at the bottom of the page. Entering VR places you a couple of meters back from the scene at standing height while the simulation keeps running; exiting restores the desktop camera. The reflective floor renders true per-eye reflections in stereo.
+
+With hand tracking (or controllers), pinch (or pull the trigger) near a dynamic body to grab it and drag it around, just like the mouse drag on desktop.
+
+The **xArm7 Hand Teleop** scene is driven by your right hand: the robot's gripper follows your hand's position and orientation, and your pinch diameter (or trigger) closes the gripper. Try picking up the cubes!
 
 ## JavaScript API
 

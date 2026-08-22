@@ -28,5 +28,8 @@
     "@mujoco/mujoco": "^3.12.0",
     "esbuild": "^0.25.12",
     "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "iwer": "^2.3.0"
   }
 }

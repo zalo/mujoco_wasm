@@ -33,6 +33,7 @@ export function setupGUI(parentContext) {
     "Torture Model": "model.xml", "Flex": "flex.xml", "Car": "car.xml",
     "Conveyors & Magnets": "conveyor_magnets.xml", "Sleeping Islands": "sleep_pile.xml",
     "xArm7 with Gripper": "ufactory_xarm7/scene.xml",
+    "xArm7 Hand Teleop": "ufactory_xarm7/scene_teleop.xml",
   }).name('Example Scene').onChange(reload);
 
   // Add a help menu.
@@ -294,6 +295,26 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     let names_array = new Uint8Array(model.names);
     let fullString = textDecoder.decode(model.names);
     let names = fullString.split(textDecoder.decode(new ArrayBuffer(1)));
+    let decodeName = (adr) => {
+      let end = adr;
+      while (end < names_array.length && names_array[end] !== 0) { end++; }
+      return textDecoder.decode(names_array.subarray(adr, end));
+    };
+
+    // Detect hand-teleop scenes: a mocap body named "hand_target" is the weld
+    // target that the VR hand drives; an actuator named "gripper" (optional)
+    // is driven by the pinch diameter.
+    parent.teleop = null;
+    for (let b = 0; b < model.nbody; b++) {
+      if (model.body_mocapid[b] >= 0 && decodeName(model.name_bodyadr[b]) == "hand_target") {
+        let gripperActId = -1;
+        for (let a = 0; a < model.nu; a++) {
+          if (decodeName(model.name_actuatoradr[a]) == "gripper") { gripperActId = a; break; }
+        }
+        parent.teleop = { bodyID: b, gripperActId: gripperActId };
+        break;
+      }
+    }
 
     // Create the root object.
     let mujocoRoot = new THREE.Group();
@@ -744,7 +765,9 @@ export async function downloadExampleScenesFolder(mujoco) {
     "ufactory_xarm7/assets/right_inner_knuckle.stl",
     "ufactory_xarm7/assets/right_outer_knuckle.stl",
     "ufactory_xarm7/scene.xml",
+    "ufactory_xarm7/scene_teleop.xml",
     "ufactory_xarm7/xarm7.xml",
+    "ufactory_xarm7/xarm7_teleop.xml",
     "model_with_tendon.xml",
   ];
 
