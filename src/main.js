@@ -5,6 +5,7 @@ import { OrbitControls    } from '../node_modules/three/examples/jsm/controls/Or
 import { VRButton         } from '../node_modules/three/examples/jsm/webxr/VRButton.js';
 import { DragStateManager } from './utils/DragStateManager.js';
 import { XRInputManager    } from './utils/XRInputManager.js';
+import { DiffIK            } from './utils/DiffIK.js';
 import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, drawTendonsAndFlex, updateSleepState, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
 import   load_mujoco        from '../node_modules/@mujoco/mujoco/mujoco.js';
 
@@ -131,8 +132,10 @@ export class MuJoCoDemo {
     this.dragStateManager = new DragStateManager(this.scene, this.renderer, this.camera, this.container.parentElement, this.controls);
 
     // Initialize VR controller / hand-tracking input. `teleop` is set by
-    // loadSceneFromURL when the scene has a "hand_target" mocap body.
+    // loadSceneFromURL when the scene has a "hand_target" mocap body; `ik`
+    // is created lazily for scenes that support actuator-driven IK.
     this.teleop = null;
+    this.ik = null;
     this.xrInput = new XRInputManager(this);
   }
 
@@ -165,44 +168,75 @@ export class MuJoCoDemo {
       // than timeMS ensures at least some steps run even after a slow frame.
       if (timeMS - this.mujoco_time > 35.0) { this.mujoco_time = timeMS - 35.0; }
 
-      // Hand teleoperation: drive the mocap target from the VR hand pose,
-      // and the gripper actuator from the pinch diameter (hands) or the
-      // trigger (controllers). The weld constraint does the rest.
-      if (this.teleop && this.renderer.xr.isPresenting) {
-        let src = this.xrInput.getTeleopSource();
-        if (src) {
-          let mocapId = this.model.body_mocapid[this.teleop.bodyID];
-          let pos = toMujocoPos(src.position.clone());
-          // Rate-limit the target's travel so tracking jumps (entering VR,
-          // tracking reacquisition) sweep the arm smoothly instead of
-          // yanking it across the workspace; human-speed motion stays 1:1.
-          let dt = Math.min((timeMS - (this.lastTeleopMS ?? timeMS)) / 1000.0, 0.1);
-          this.lastTeleopMS = timeMS;
-          let maxStep = 1.5 * dt; // meters, at 1.5 m/s
-          this.tmpVec.set(
-            pos.x - this.data.mocap_pos[(mocapId * 3) + 0],
-            pos.y - this.data.mocap_pos[(mocapId * 3) + 1],
-            pos.z - this.data.mocap_pos[(mocapId * 3) + 2]);
-          if (this.tmpVec.length() > maxStep) { this.tmpVec.setLength(maxStep); }
-          this.data.mocap_pos[(mocapId * 3) + 0] += this.tmpVec.x;
-          this.data.mocap_pos[(mocapId * 3) + 1] += this.tmpVec.y;
-          this.data.mocap_pos[(mocapId * 3) + 2] += this.tmpVec.z;
-          // Quaternion vector parts map to MuJoCo axes like positions do
-          // ((x, y, z) -> (x, -z, y)); then rotate -90 degrees about local x
-          // so the gripper's +z (finger direction) points where the hand points.
-          this.tmpQuat.set(src.quaternion.x, -src.quaternion.z, src.quaternion.y, src.quaternion.w);
-          this.tmpQuat.multiply(teleopGripAlignment);
-          this.data.mocap_quat[(mocapId * 4) + 0] = this.tmpQuat.w;
-          this.data.mocap_quat[(mocapId * 4) + 1] = this.tmpQuat.x;
-          this.data.mocap_quat[(mocapId * 4) + 2] = this.tmpQuat.y;
-          this.data.mocap_quat[(mocapId * 4) + 3] = this.tmpQuat.z;
-          if (this.teleop.gripperActId >= 0) {
-            let lo = this.model.actuator_ctrlrange[(this.teleop.gripperActId * 2) + 0];
-            let hi = this.model.actuator_ctrlrange[(this.teleop.gripperActId * 2) + 1];
-            let closed = null; // 0 = open, 1 = closed
-            if      (src.aperture != null) { closed = Math.min(Math.max((0.07 - src.aperture) / 0.055, 0.0), 1.0); }
-            else if (src.trigger  != null) { closed = src.trigger; }
-            if (closed != null) { this.data.ctrl[this.teleop.gripperActId] = lo + closed * (hi - lo); }
+      // Hand teleoperation: the VR hand drives the mocap target marker
+      // (rate-limited), and differential IK drives the arm's position
+      // actuators toward it with command-level ground-clearance safeties.
+      // The gripper follows the pinch diameter (hands) or trigger.
+      if (this.teleop) {
+        let mocapId = this.model.body_mocapid[this.teleop.bodyID];
+        let dt = Math.min((timeMS - (this.lastTeleopMS ?? timeMS)) / 1000.0, 0.1);
+        this.lastTeleopMS = timeMS;
+
+        if (this.renderer.xr.isPresenting) {
+          let src = this.xrInput.getTeleopSource();
+          if (src) {
+            let pos = toMujocoPos(src.position.clone());
+            // Rate-limit the target's travel so tracking jumps (entering VR,
+            // tracking reacquisition) sweep the arm smoothly instead of
+            // yanking it across the workspace; human-speed motion stays 1:1.
+            let maxStep = 1.5 * dt; // meters, at 1.5 m/s
+            this.tmpVec.set(
+              pos.x - this.data.mocap_pos[(mocapId * 3) + 0],
+              pos.y - this.data.mocap_pos[(mocapId * 3) + 1],
+              pos.z - this.data.mocap_pos[(mocapId * 3) + 2]);
+            if (this.tmpVec.length() > maxStep) { this.tmpVec.setLength(maxStep); }
+            this.data.mocap_pos[(mocapId * 3) + 0] += this.tmpVec.x;
+            this.data.mocap_pos[(mocapId * 3) + 1] += this.tmpVec.y;
+            this.data.mocap_pos[(mocapId * 3) + 2] += this.tmpVec.z;
+            // Quaternion vector parts map to MuJoCo axes like positions do
+            // ((x, y, z) -> (x, -z, y)); then rotate -90 degrees about local x
+            // so the gripper's +z (finger direction) points where the hand points.
+            this.tmpQuat.set(src.quaternion.x, -src.quaternion.z, src.quaternion.y, src.quaternion.w);
+            this.tmpQuat.multiply(teleopGripAlignment);
+            this.data.mocap_quat[(mocapId * 4) + 0] = this.tmpQuat.w;
+            this.data.mocap_quat[(mocapId * 4) + 1] = this.tmpQuat.x;
+            this.data.mocap_quat[(mocapId * 4) + 2] = this.tmpQuat.y;
+            this.data.mocap_quat[(mocapId * 4) + 3] = this.tmpQuat.z;
+            if (this.teleop.gripperActId >= 0) {
+              let lo = this.model.actuator_ctrlrange[(this.teleop.gripperActId * 2) + 0];
+              let hi = this.model.actuator_ctrlrange[(this.teleop.gripperActId * 2) + 1];
+              let closed = null; // 0 = open, 1 = closed
+              if      (src.aperture != null) { closed = Math.min(Math.max((0.07 - src.aperture) / 0.055, 0.0), 1.0); }
+              else if (src.trigger  != null) { closed = src.trigger; }
+              if (closed != null) { this.data.ctrl[this.teleop.gripperActId] = lo + closed * (hi - lo); }
+            }
+          }
+        }
+
+        // Differential IK toward the (workspace-clamped) target. Runs on
+        // desktop too, so the arm rises to the marker on scene load and
+        // follows the marker when it is dragged while paused.
+        if (this.teleop.tcpSiteId >= 0) {
+          if (!this.ik || this.ik.model != this.model) {
+            if (this.ik) { this.ik.dispose(); }
+            this.ik = new DiffIK(mujoco, this.model, { siteId: this.teleop.tcpSiteId });
+          }
+          let target = [
+            this.data.mocap_pos[(mocapId * 3) + 0],
+            this.data.mocap_pos[(mocapId * 3) + 1],
+            this.data.mocap_pos[(mocapId * 3) + 2]];
+          this.ik.clampTarget(target);
+          // Write the clamp back so the marker shows the actual command.
+          this.data.mocap_pos[(mocapId * 3) + 0] = target[0];
+          this.data.mocap_pos[(mocapId * 3) + 1] = target[1];
+          this.data.mocap_pos[(mocapId * 3) + 2] = target[2];
+          this.ik.step(this.data, target,
+            [...this.data.mocap_quat.slice(mocapId * 4, (mocapId * 4) + 4)], dt);
+          // Hook for streaming the safety-gated joint commands to real
+          // hardware: (armJointTargets: Float64Array, gripperCtrl: number).
+          if (this.onTeleopCommand) {
+            this.onTeleopCommand(this.ik.lastCommand,
+              this.teleop.gripperActId >= 0 ? this.data.ctrl[this.teleop.gripperActId] : 0);
           }
         }
       }

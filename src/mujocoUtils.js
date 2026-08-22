@@ -274,6 +274,11 @@ export function setupGUI(parentContext) {
  */
 export async function loadSceneFromURL(mujoco, filename, parent) {
     // Free the old model and data (wasm heap objects are not garbage-collected).
+    // The IK solver holds a shadow MjData for the old model; free it first.
+    if (parent.ik != null) {
+      parent.ik.dispose();
+      parent.ik = null;
+    }
     if (parent.data != null) {
       parent.data.delete();
       parent.data = null;
@@ -301,9 +306,10 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       return textDecoder.decode(names_array.subarray(adr, end));
     };
 
-    // Detect hand-teleop scenes: a mocap body named "hand_target" is the weld
+    // Detect hand-teleop scenes: a mocap body named "hand_target" is the IK
     // target that the VR hand drives; an actuator named "gripper" (optional)
-    // is driven by the pinch diameter.
+    // is driven by the pinch diameter; a site named "link_tcp" plus
+    // joint-transmission actuators enable differential-IK arm control.
     parent.teleop = null;
     for (let b = 0; b < model.nbody; b++) {
       if (model.body_mocapid[b] >= 0 && decodeName(model.name_bodyadr[b]) == "hand_target") {
@@ -311,9 +317,34 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         for (let a = 0; a < model.nu; a++) {
           if (decodeName(model.name_actuatoradr[a]) == "gripper") { gripperActId = a; break; }
         }
-        parent.teleop = { bodyID: b, gripperActId: gripperActId };
+        let tcpSiteId = -1;
+        for (let s = 0; s < model.nsite; s++) {
+          if (decodeName(model.name_siteadr[s]) == "link_tcp") { tcpSiteId = s; break; }
+        }
+        let hasArmActuators = false;
+        for (let a = 0; a < model.nu; a++) {
+          if (model.actuator_trntype[a] == 0) { hasArmActuators = true; break; } // mjTRN_JOINT
+        }
+        parent.teleop = { bodyID: b, gripperActId: gripperActId,
+                          tcpSiteId: (hasArmActuators ? tcpSiteId : -1) };
         break;
       }
+    }
+
+    // Teleop scenes start with the arm at its home keyframe: qpos0 for arms
+    // like the xArm7 is a folded pose against joint limits that IK can stall
+    // in. Copy only the actuated arm joints (the keyframe comes from the bare
+    // arm model and is zero-padded for the rest of the scene, so a full
+    // mj_resetDataKeyframe would teleport free bodies to the origin).
+    if (parent.teleop && model.nkey > 0) {
+      for (let a = 0; a < model.nu; a++) {
+        if (model.actuator_trntype[a] == 0) { // mjTRN_JOINT
+          let adr = model.jnt_qposadr[model.actuator_trnid[2 * a]];
+          data.qpos[adr] = model.key_qpos[adr];
+          data.ctrl[a] = model.key_qpos[adr];
+        }
+      }
+      mujoco.mj_forward(model, data);
     }
 
     // Create the root object.
@@ -384,9 +415,13 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         if (!(meshID in meshes)) {
           geometry = new THREE.BufferGeometry();
 
-          let vertex_buffer = model.mesh_vert.subarray(
+          // Copy out of the wasm heap: heap growth (e.g. allocating another
+          // MjData later) detaches all existing views, which would silently
+          // empty any geometry that aliased them. The copy also keeps the
+          // coordinate swizzle below from corrupting the model's own data.
+          let vertex_buffer = new Float32Array(model.mesh_vert.subarray(
              model.mesh_vertadr[meshID] * 3,
-            (model.mesh_vertadr[meshID]  + model.mesh_vertnum[meshID]) * 3);
+            (model.mesh_vertadr[meshID]  + model.mesh_vertnum[meshID]) * 3));
           for (let v = 0; v < vertex_buffer.length; v+=3){
             //vertex_buffer[v + 0] =  vertex_buffer[v + 0];
             let temp             =  vertex_buffer[v + 1];
@@ -394,9 +429,9 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
             vertex_buffer[v + 2] = -temp;
           }
 
-          let normal_buffer = model.mesh_normal.subarray(
+          let normal_buffer = new Float32Array(model.mesh_normal.subarray(
              model.mesh_normaladr[meshID] * 3,
-            (model.mesh_normaladr[meshID]  + model.mesh_normalnum[meshID]) * 3);
+            (model.mesh_normaladr[meshID]  + model.mesh_normalnum[meshID]) * 3));
           for (let v = 0; v < normal_buffer.length; v+=3){
             //normal_buffer[v + 0] =  normal_buffer[v + 0];
             let temp             =  normal_buffer[v + 1];
@@ -519,7 +554,8 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       let currentMaterial = new THREE.MeshPhysicalMaterial({
         color: new THREE.Color(color[0], color[1], color[2]),
         transparent: color[3] < 1.0,
-        opacity: color[3]/255.,
+        opacity: color[3], // rgba alpha is already 0..1
+
         specularIntensity: model.geom_matid[g] != -1 ?       model.mat_specular   [model.geom_matid[g]] : undefined,
         reflectivity     : model.geom_matid[g] != -1 ?       model.mat_reflectance[model.geom_matid[g]] : undefined,
         roughness        : model.geom_matid[g] != -1 ? 1.0 - model.mat_shininess  [model.geom_matid[g]] : undefined,
@@ -767,7 +803,6 @@ export async function downloadExampleScenesFolder(mujoco) {
     "ufactory_xarm7/scene.xml",
     "ufactory_xarm7/scene_teleop.xml",
     "ufactory_xarm7/xarm7.xml",
-    "ufactory_xarm7/xarm7_teleop.xml",
     "model_with_tendon.xml",
   ];
 
