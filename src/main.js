@@ -209,30 +209,29 @@ export class MuJoCoDemo {
         sm[(sid * 9) + 1] * d[0] + sm[(sid * 9) + 4] * d[1] + sm[(sid * 9) + 7] * d[2],
         sm[(sid * 9) + 2] * d[0] + sm[(sid * 9) + 5] * d[1] + sm[(sid * 9) + 8] * d[2]];
     };
-    let tipNeutral = [], tipHome = [], scale = [];
+    let robotKnuckle = [], scale = [];
     for (let f = 0; f < 5; f++) {
       const neutral = this.handLocal(handPose, handPose.tips[f]);
-      tipNeutral.push(neutral);
-      let home = [0, 0, 0], s = 1.0;
+      let rk = [0, 0, 0], s = 1.0;
       if (this.teleop.hand) {
         const tb = this.teleop.hand.tipBodyIds[f];
-        home = siteLocal(this.data.xpos[(tb * 3) + 0], this.data.xpos[(tb * 3) + 1], this.data.xpos[(tb * 3) + 2]);
+        const home = siteLocal(this.data.xpos[(tb * 3) + 0], this.data.xpos[(tb * 3) + 1], this.data.xpos[(tb * 3) + 2]);
         // Per-finger scale from true KNUCKLE-to-tip length ratios: fingertip
-        // deltas fold around the knuckles, so wrist-anchored lengths
+        // vectors are anchored at the knuckles, so wrist-anchored lengths
         // overdrive curl depth and push pinch targets behind the palm.
         const kb = this.teleop.hand.knuckleBodyIds[f];
         if (kb >= 0) {
-          const rk = siteLocal(this.data.xpos[(kb * 3) + 0], this.data.xpos[(kb * 3) + 1], this.data.xpos[(kb * 3) + 2]);
+          rk = siteLocal(this.data.xpos[(kb * 3) + 0], this.data.xpos[(kb * 3) + 1], this.data.xpos[(kb * 3) + 2]);
           const hk = this.handLocal(handPose, handPose.knuckles[f]);
           const robotLen = Math.hypot(home[0] - rk[0], home[1] - rk[1], home[2] - rk[2]);
           const humanLen = Math.max(Math.hypot(neutral[0] - hk[0], neutral[1] - hk[1], neutral[2] - hk[2]), 0.02);
           s = Math.min(Math.max(robotLen / humanLen, 0.5), 1.5);
         }
       }
-      tipHome.push(home);
+      robotKnuckle.push(rk);
       scale.push(s);
     }
-    return { tipNeutral: tipNeutral, tipHome: tipHome, scale: scale };
+    return { robotKnuckle: robotKnuckle, scale: scale };
   }
 
   /** Fingertip targets (MuJoCo world) for the dexterous hand: the user's
@@ -243,11 +242,16 @@ export class MuJoCoDemo {
     const sp = this.data.site_xpos, sm = this.data.site_xmat;
     const targets = [];
     for (let f = 0; f < 5; f++) {
-      const rel = this.handLocal(handPose, handPose.tips[f]);
+      // ABSOLUTE per-finger vector retargeting: the human knuckle-to-tip
+      // vector, scaled, re-rooted at the robot's matching knuckle. Unlike
+      // delta-from-neutral retargeting, this maps hand POSES faithfully
+      // (flat is flat, a fist is a fist) with no calibration-pose bias.
+      const tipL = this.handLocal(handPose, handPose.tips[f]);
+      const hkL = this.handLocal(handPose, handPose.knuckles[f]);
       const local = [
-        o.tipHome[f][0] + o.scale[f] * (rel[0] - o.tipNeutral[f][0]),
-        o.tipHome[f][1] + o.scale[f] * (rel[1] - o.tipNeutral[f][1]),
-        o.tipHome[f][2] + o.scale[f] * (rel[2] - o.tipNeutral[f][2])];
+        o.robotKnuckle[f][0] + o.scale[f] * (tipL[0] - hkL[0]),
+        o.robotKnuckle[f][1] + o.scale[f] * (tipL[1] - hkL[1]),
+        o.robotKnuckle[f][2] + o.scale[f] * (tipL[2] - hkL[2])];
       targets.push([
         sp[(sid * 3) + 0] + sm[(sid * 9) + 0] * local[0] + sm[(sid * 9) + 1] * local[1] + sm[(sid * 9) + 2] * local[2],
         sp[(sid * 3) + 1] + sm[(sid * 9) + 3] * local[0] + sm[(sid * 9) + 4] * local[1] + sm[(sid * 9) + 5] * local[2],
@@ -444,6 +448,16 @@ export class MuJoCoDemo {
         // Clear old perturbations, apply new ones. Mouse drags and XR
         // pinch/trigger grabs share the same spring-force treatment.
         for (let i = 0; i < this.data.qfrc_applied.length; i++) { this.data.qfrc_applied[i] = 0.0; }
+
+        // Software gravity compensation for the teleoperated robot: cancel
+        // the bias forces on its dofs so servo forcerange is spent on
+        // motion, not on holding the arm up (the elbow otherwise saturates
+        // statically and feels far more damped than the other joints).
+        if (this.teleop && this.teleop.robotDofs) {
+          for (const d of this.teleop.robotDofs) {
+            this.data.qfrc_applied[d] += this.data.qfrc_bias[d];
+          }
+        }
         let drags = [];
         if (this.dragStateManager.physicsObject && this.dragStateManager.physicsObject.bodyID) { drags.push(this.dragStateManager); }
         drags.push(...this.xrInput.activeGrabs());

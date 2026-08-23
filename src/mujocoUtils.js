@@ -384,14 +384,28 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       // The Shadow Hand's wrist actuators as shipped are far too weak to
       // carry the hand at speed on the end of an arm (kp ~10 against a
       // ~2.5kg hand), which reads as rubber-banding; stiffen any weak
-      // position servos on the arm's IK chain.
+      // position servos on the arm's IK chain. Damping goes on the JOINT
+      // (integrated implicitly, stable at any value), not the actuator's
+      // velocity bias, which is integrated explicitly and limit-cycles at
+      // this timestep/inertia (kv*dt/I > 2).
       for (const a of parent.teleop.armActIds) {
         if (model.actuator_gainprm[a * 10] < 50) {
           model.actuator_gainprm[(a * 10) + 0] = 300;
           model.actuator_biasprm[(a * 10) + 1] = -300;
-          model.actuator_biasprm[(a * 10) + 2] = -30;
+          model.actuator_biasprm[(a * 10) + 2] = 0;
           model.actuator_forcerange[(a * 2) + 0] = -30;
           model.actuator_forcerange[(a * 2) + 1] = 30;
+          model.dof_damping[model.jnt_dofadr[model.actuator_trnid[a * 2]]] = 8;
+        }
+      }
+      // Robot dofs, for software gravity compensation in the demo loop
+      // (compile-time ngravcomp is 0, so model.body_gravcomp is inert).
+      let root = model.body_rootid[model.site_bodyid[parent.teleop.tcpSiteId >= 0 ?
+        parent.teleop.tcpSiteId : 0]];
+      parent.teleop.robotDofs = [];
+      if (parent.teleop.tcpSiteId >= 0) {
+        for (let d = 0; d < model.nv; d++) {
+          if (model.body_rootid[model.dof_bodyid[d]] == root) { parent.teleop.robotDofs.push(d); }
         }
       }
     }

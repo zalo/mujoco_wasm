@@ -63,14 +63,24 @@ for (const a of armActIds) {
   if (model.actuator_gainprm[a * 10] < 50) {
     model.actuator_gainprm[(a * 10) + 0] = 300;
     model.actuator_biasprm[(a * 10) + 1] = -300;
-    model.actuator_biasprm[(a * 10) + 2] = -30;
+    model.actuator_biasprm[(a * 10) + 2] = 0;
     model.actuator_forcerange[(a * 2) + 0] = -30;
     model.actuator_forcerange[(a * 2) + 1] = 30;
+    model.dof_damping[model.jnt_dofadr[model.actuator_trnid[a * 2]]] = 8;
   }
 }
 const ik = new DiffIK(mujoco, model, { siteId: tcpSiteId, armActIds: armActIds,
   reachCenter: [0, 0, 1.3], reachRadius: 0.95 });
 const hr = new HandRetarget(mujoco, model, { tipBodyIds: tipBodyIds, actIds: handActIds });
+// software gravity compensation on robot dofs, like the demo loop
+const gcRoot = model.body_rootid[model.site_bodyid[tcpSiteId]];
+const robotDofs = [];
+for (let d = 0; d < model.nv; d++) if (model.body_rootid[model.dof_bodyid[d]] == gcRoot) robotDofs.push(d);
+const gravcompStep = () => {
+  for (let i = 0; i < data.qfrc_applied.length; i++) data.qfrc_applied[i] = 0;
+  for (const d of robotDofs) data.qfrc_applied[d] += data.qfrc_bias[d];
+  mujoco.mj_step(model, data);
+};
 
 const FRAME_DT = 1 / 60, STEPS = Math.round(FRAME_DT / model.opt.timestep);
 let minSphereBottom = Infinity;
@@ -104,7 +114,7 @@ const runFrames = (frames) => {
     ik.clampTarget(t);
     ik.step(data, t, down, FRAME_DT);
     if (fingerTargets) hr.step(data, fingerTargets.map(toWorld), FRAME_DT);
-    for (let s = 0; s < STEPS; s++) mujoco.mj_step(model, data);
+    for (let s = 0; s < STEPS; s++) gravcompStep();
     trackClearance();
   }
 };
@@ -130,7 +140,12 @@ runFrames(150);
 
 fingerTargets = curledTips;
 const before = tipBodyIds.map((_, f) => dist(tip(f), toWorld(fingerTargets[f])) * 1000);
-runFrames(240);
+let curlFrames = -1;
+for (let fr = 0; fr < 240; fr++) {
+  runFrames(1);
+  if (curlFrames < 0 && Math.max(...tipBodyIds.map((_, f) => dist(tip(f), toWorld(fingerTargets[f])))) < 0.010) { curlFrames = fr + 1; }
+}
+console.log('T2 curl time to <10mm:', curlFrames < 0 ? '>4s' : (curlFrames / 60).toFixed(2) + 's');
 const after = tipBodyIds.map((_, f) => dist(tip(f), toWorld(fingerTargets[f])) * 1000);
 console.log('T2 finger curl    : tip errors', before.map(v => v.toFixed(0)).join('/'), '->', after.map(v => v.toFixed(0)).join('/'), 'mm');
 const e2 = Math.max(...after);

@@ -18,6 +18,15 @@ const model = mujoco.MjModel.mj_loadXML('/working/ufactory_xarm7/scene_teleop.xm
 const data = new mujoco.MjData(model);
 mujoco.mj_forward(model, data);
 const ik = new DiffIK(mujoco, model, { siteId: 0, reachCenter: [0, 0, 1.3], reachRadius: 0.95 });
+// software gravity compensation on robot dofs, like the demo loop
+const gcRoot = model.body_rootid[model.site_bodyid[0]];
+const robotDofs = [];
+for (let d = 0; d < model.nv; d++) if (model.body_rootid[model.dof_bodyid[d]] == gcRoot) robotDofs.push(d);
+const gravcompStep = () => {
+  for (let i = 0; i < data.qfrc_applied.length; i++) data.qfrc_applied[i] = 0;
+  for (const d of robotDofs) data.qfrc_applied[d] += data.qfrc_bias[d];
+  mujoco.mj_step(model, data);
+};
 console.log('arm actuators:', ik.armActIds.join(','), '| guarded geoms:', ik.guardGeoms.length);
 
 const FRAME_DT = 1 / 60, STEPS = Math.round(FRAME_DT / model.opt.timestep);
@@ -34,7 +43,7 @@ function runFrames(target, quat, frames) {
     /* joint speed measured from sim below */
     if (ik.status.groundLimited) groundLimitedFrames++;
     for (let k = 0; k < 7; k++) prevQ[k] = data.qpos[k];
-    for (let s = 0; s < STEPS; s++) mujoco.mj_step(model, data);
+    for (let s = 0; s < STEPS; s++) gravcompStep();
     for (let k = 0; k < 7; k++) maxJointVel = Math.max(maxJointVel, Math.abs(data.qpos[k] - prevQ[k]) / FRAME_DT);
     // measure REAL (simulated) clearance of guarded geoms
     for (const g of ik.guardGeoms) {

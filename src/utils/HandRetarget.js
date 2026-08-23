@@ -23,11 +23,15 @@ export class HandRetarget {
     this.tipBodyIds  = [...opts.tipBodyIds]; // thumb, index, middle, ring, pinky
     this.actIds      = [...opts.actIds];
     this.damping     = opts.damping     ?? 1e-3;
-    this.maxVel      = opts.maxVel      ?? 3.5;   // actuator-space rad/s
+    this.maxVel      = opts.maxVel      ?? 8.0;   // actuator-space rad/s (human finger speed)
+    // Velocity law like the arm's: correct taskGain/s of the remaining
+    // error instead of the full error every cycle, which overshoots
+    // against servo lag.
+    this.taskGain    = opts.taskGain    ?? 12.0;
     // Finger position servos are weak (kp ~0.4-1.5), so a large command lead
     // winds up past the target before the measured tips catch up; keep the
-    // leash short to bound the overshoot.
-    this.leash       = opts.leash       ?? 0.3;   // rad, command lead over measured
+    // leash moderate to bound the overshoot.
+    this.leash       = opts.leash       ?? 0.4;   // rad, command lead over measured
     this.clearance   = opts.clearance   ?? 0.015; // m, bounding-sphere height
     this.floorZ      = opts.floorZ      ?? 0.0;
 
@@ -129,9 +133,12 @@ export class HandRetarget {
       for (let i = 0; i < nTask; i++) { dv[k] += J[i][k] * y[i]; }
     }
 
-    // Velocity limit, then integrate the persistent command with a leash
-    // around the measured actuator lengths.
-    const maxStep = this.maxVel * Math.min(Math.max(dt, 1e-3), 0.1);
+    // Velocity law, velocity limit, then integrate the persistent command
+    // with a leash around the measured actuator lengths.
+    const dtc = Math.min(Math.max(dt, 1e-3), 0.1);
+    const gain = Math.min(this.taskGain * dtc, 1.0);
+    for (let k = 0; k < n; k++) { dv[k] *= gain; }
+    const maxStep = this.maxVel * dtc;
     const worst = Math.max(...dv.map(Math.abs));
     if (worst > maxStep) { for (let k = 0; k < n; k++) { dv[k] *= maxStep / worst; } }
 
