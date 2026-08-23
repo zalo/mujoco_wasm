@@ -30,6 +30,18 @@ Simply ensure `npm` is installed and run `npm install` to pull three.js and MuJo
 
 To serve and run the index.html page while developing, use an HTTP Server.  I like to use [five-server](https://github.com/yandeu/five-server).
 
+## VR
+
+On a WebXR-capable device (served over HTTPS), an `ENTER VR` button appears at the bottom of the page. Entering VR places you a couple of meters back from the scene at standing height while the simulation keeps running; exiting restores the desktop camera. The reflective floor renders true per-eye reflections in stereo.
+
+With hand tracking (or controllers), pinch (or pull the trigger) near a dynamic body to grab it and drag it around, just like the mouse drag on desktop.
+
+The **xArm7 Hand Teleop** scene is driven by your right hand: damped-least-squares differential IK (`src/utils/DiffIK.js`) drives the arm's stock position actuators so the gripper follows your hand's position and orientation, and your pinch diameter (or trigger) closes the gripper. Try picking up the cubes!
+
+The **xArm7 Shadow Hand** scene mounts a Shadow Hand E3M5 on the arm (composed with MJCF `<attach>`), on a 1m column — in VR you stand at the column facing the cube table, and the robot palm tracks your wrist's *absolute* position and orientation, so the robot hand goes exactly where your hand is. Recentering your headset (long-press the system button on Quest) resets the scene and re-plants you at the column. Your five fingertips drive the eighteen finger actuators through fingertip-retargeting differential IK (`src/utils/HandRetarget.js`, the AnyTeleop/dex-retargeting formulation, with a DexPilot-style pinch refinement so robot fingertips meet when yours do).
+
+The IK layer is written with real-hardware teleoperation in mind. Tracking follows a velocity law (a finite task gain rather than full-step correction, which limit-cycles against actuator lag), and the joint-position commands it emits (exposed via the `demo.onTeleopCommand(armJointTargets, gripperCtrl, handActuatorTargets)` hook) are safety-gated before they reach the actuators — the task-space target is clamped above the floor and into the reachable workspace, per-joint velocity is limited, commands are leashed to the measured joint positions (no windup when the arm is blocked), and every candidate command is evaluated kinematically on a shadow model: commands that would bring arm or hand geometry within 2 cm of the ground or increase self-collision are rejected, and when every path toward the target is blocked the arm retreats toward its neutral home posture (which also resolves the redundant elbow away from gimbal locks). Run `npm run test:ik` and `npm run test:hand` for the safety and retargeting regression suites.
+
 ## JavaScript API
 
 ```javascript

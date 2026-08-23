@@ -1,0 +1,40 @@
+<mujoco model="xArm7 Shadow Hand Teleop">
+  <!--
+    Full arm + dexterous hand teleoperation: differential IK drives the
+    xArm7 (plus the Shadow Hand's two wrist joints) so the robot palm tracks
+    your wrist in delta mode (your hand position at calibration maps onto
+    the arm's ready pose; recentering your headset recalibrates and resets
+    the scene). The eighteen finger actuators are driven by fingertip-
+    retargeting IK from Quest hand tracking. The arm is mounted at 1m on a
+    column, and in VR you stand at the column so the robot arm works where
+    your own arm does. The red "hand_target" mocap body is the palm target.
+  -->
+  <include file="xarm7_hand.xml"/>
+
+  <!-- The noslip solver stops grasped objects from slowly creeping out of
+       the fingers during long holds. -->
+  <option noslip_iterations="3"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="150" elevation="-20"/>
+  </visual>
+
+  <worldbody>
+    <light pos="0 0 2.5" dir="0 0 -1" directional="true"/>
+    <geom name="floor" size="0 0 0.05" type="plane"/>
+    <geom name="column" type="cylinder" size=".05 .5" pos="0 0 .5" rgba="1 1 1 1"/>
+
+    <!-- Palm IK target marker: driven by the VR wrist, no constraint attached. -->
+    <body name="hand_target" mocap="true" pos="0 -.35 1" quat="0 1 0 0">
+      <geom type="sphere" size=".02" contype="0" conaffinity="0" rgba=".9 .3 .3 .4" group="2"/>
+    </body>
+
+    <!-- A table of cubes to pick up. -->
+    <geom name="table" type="box" size=".15 .12 .5" pos="0 -.45 .5" rgba=".45 .5 .55 1"/>
+    <body pos="-.09 -.43 1.025"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".85 .6 .3 1"/></body>
+    <body pos="0 -.47 1.025"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".4 .7 .45 1"/></body>
+    <body pos=".09 -.43 1.025"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".45 .55 .8 1"/></body>
+  </worldbody>
+</mujoco>

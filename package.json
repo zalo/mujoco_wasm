@@ -8,7 +8,9 @@
   },
   "scripts": {
     "build": "esbuild ./src/main.js --bundle --sourcemap --format=esm --outdir=./build --platform=node",
-    "test": "node test_load.mjs"
+    "test": "node test_load.mjs",
+    "test:ik": "node ik_safety_test.mjs",
+    "test:hand": "node hand_ik_test.mjs"
   },
   "repository": {
     "type": "git",
@@ -27,6 +29,9 @@
   "dependencies": {
     "@mujoco/mujoco": "^3.12.0",
     "esbuild": "^0.25.12",
-    "three": "^0.181.0"
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "iwer": "^2.3.0"
   }
 }

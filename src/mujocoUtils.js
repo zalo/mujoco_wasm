@@ -33,6 +33,8 @@ export function setupGUI(parentContext) {
     "Torture Model": "model.xml", "Flex": "flex.xml", "Car": "car.xml",
     "Conveyors & Magnets": "conveyor_magnets.xml", "Sleeping Islands": "sleep_pile.xml",
     "xArm7 with Gripper": "ufactory_xarm7/scene.xml",
+    "xArm7 Hand Teleop": "ufactory_xarm7/scene_teleop.xml",
+    "xArm7 Shadow Hand": "ufactory_xarm7/scene_hand_teleop.xml",
   }).name('Example Scene').onChange(reload);
 
   // Add a help menu.
@@ -273,6 +275,16 @@ export function setupGUI(parentContext) {
  */
 export async function loadSceneFromURL(mujoco, filename, parent) {
     // Free the old model and data (wasm heap objects are not garbage-collected).
+    // The IK solvers hold shadow MjData for the old model; free them first.
+    if (parent.ik != null) {
+      parent.ik.dispose();
+      parent.ik = null;
+    }
+    if (parent.handRetarget != null) {
+      parent.handRetarget.dispose();
+      parent.handRetarget = null;
+    }
+    parent.teleopOrigin = null;
     if (parent.data != null) {
       parent.data.delete();
       parent.data = null;
@@ -294,6 +306,109 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     let names_array = new Uint8Array(model.names);
     let fullString = textDecoder.decode(model.names);
     let names = fullString.split(textDecoder.decode(new ArrayBuffer(1)));
+    let decodeName = (adr) => {
+      let end = adr;
+      while (end < names_array.length && names_array[end] !== 0) { end++; }
+      return textDecoder.decode(names_array.subarray(adr, end));
+    };
+
+    // Detect hand-teleop scenes: a mocap body named "hand_target" is the IK
+    // target that the VR hand drives; an actuator named "gripper" (optional)
+    // is driven by the pinch diameter; a TCP site plus joint-transmission
+    // actuators enable differential-IK arm control; five fingertip bodies
+    // enable fingertip retargeting for dexterous hands.
+    parent.teleop = null;
+    for (let b = 0; b < model.nbody; b++) {
+      if (model.body_mocapid[b] >= 0 && decodeName(model.name_bodyadr[b]) == "hand_target") {
+        let gripperActId = -1;
+        for (let a = 0; a < model.nu; a++) {
+          // endsWith: <attach> prefixes actuator names (e.g. "r_gripper").
+          if (decodeName(model.name_actuatoradr[a]).endsWith("gripper")) { gripperActId = a; break; }
+        }
+        // TCP site: "link_tcp" if present, else a palm "grasp_site" (both
+        // possibly renamed with an <attach> prefix, hence endsWith).
+        let tcpSiteId = -1;
+        for (let s = 0; s < model.nsite; s++) {
+          let n = decodeName(model.name_siteadr[s]);
+          if (n.endsWith("link_tcp")) { tcpSiteId = s; break; }
+          if (tcpSiteId < 0 && n.endsWith("grasp_site")) { tcpSiteId = s; }
+        }
+        // Arm actuators: joint-transmission actuators on the kinematic chain
+        // from the world to the TCP site's body (this includes a mounted
+        // hand's wrist joints, and excludes its finger joints).
+        let armActIds = [], hand = null;
+        if (tcpSiteId >= 0) {
+          let chainJoints = new Set();
+          for (let p = model.site_bodyid[tcpSiteId]; p != 0; p = model.body_parentid[p]) {
+            for (let j = model.body_jntadr[p]; j < model.body_jntadr[p] + model.body_jntnum[p]; j++) {
+              chainJoints.add(j);
+            }
+          }
+          for (let a = 0; a < model.nu; a++) {
+            if (model.actuator_trntype[a] == 0 && chainJoints.has(model.actuator_trnid[a * 2])) {
+              armActIds.push(a); // mjTRN_JOINT on the chain
+            }
+          }
+          // Dexterous hand: fingertip distal bodies (Shadow Hand naming,
+          // thumb..pinky); its actuators are everything off the arm chain.
+          const findBodies = (suffixes) => suffixes.map((suffix) => {
+            for (let tb = 0; tb < model.nbody; tb++) {
+              if (decodeName(model.name_bodyadr[tb]).endsWith(suffix)) { return tb; }
+            }
+            return -1;
+          });
+          let tipBodyIds = findBodies(["thdistal", "ffdistal", "mfdistal", "rfdistal", "lfdistal"]);
+          let knuckleBodyIds = findBodies(["thproximal", "ffproximal", "mfproximal", "rfproximal", "lfproximal"]);
+          if (tipBodyIds.every((id) => id >= 0)) {
+            let actIds = [];
+            for (let a = 0; a < model.nu; a++) {
+              if (!armActIds.includes(a) && a != gripperActId) { actIds.push(a); }
+            }
+            if (actIds.length > 0) {
+              hand = { tipBodyIds: tipBodyIds, knuckleBodyIds: knuckleBodyIds, actIds: actIds };
+            }
+          }
+        }
+        parent.teleop = { bodyID: b, gripperActId: gripperActId,
+                          tcpSiteId: (armActIds.length > 0 ? tcpSiteId : -1),
+                          armActIds: armActIds, hand: hand };
+        break;
+      }
+    }
+
+    // Teleop scenes start with the arm at its home keyframe (qpos0 for arms
+    // like the xArm7 is a folded pose against joint limits that IK can
+    // stall in), and with weak wrist servos stiffened.
+    if (parent.teleop) {
+      applyTeleopHomeKeyframe(mujoco, model, data);
+      // The Shadow Hand's wrist actuators as shipped are far too weak to
+      // carry the hand at speed on the end of an arm (kp ~10 against a
+      // ~2.5kg hand), which reads as rubber-banding; stiffen any weak
+      // position servos on the arm's IK chain. Damping goes on the JOINT
+      // (integrated implicitly, stable at any value), not the actuator's
+      // velocity bias, which is integrated explicitly and limit-cycles at
+      // this timestep/inertia (kv*dt/I > 2).
+      for (const a of parent.teleop.armActIds) {
+        if (model.actuator_gainprm[a * 10] < 50) {
+          model.actuator_gainprm[(a * 10) + 0] = 300;
+          model.actuator_biasprm[(a * 10) + 1] = -300;
+          model.actuator_biasprm[(a * 10) + 2] = 0;
+          model.actuator_forcerange[(a * 2) + 0] = -30;
+          model.actuator_forcerange[(a * 2) + 1] = 30;
+          model.dof_damping[model.jnt_dofadr[model.actuator_trnid[a * 2]]] = 8;
+        }
+      }
+      // Robot dofs, for software gravity compensation in the demo loop
+      // (compile-time ngravcomp is 0, so model.body_gravcomp is inert).
+      let root = model.body_rootid[model.site_bodyid[parent.teleop.tcpSiteId >= 0 ?
+        parent.teleop.tcpSiteId : 0]];
+      parent.teleop.robotDofs = [];
+      if (parent.teleop.tcpSiteId >= 0) {
+        for (let d = 0; d < model.nv; d++) {
+          if (model.body_rootid[model.dof_bodyid[d]] == root) { parent.teleop.robotDofs.push(d); }
+        }
+      }
+    }
 
     // Create the root object.
     let mujocoRoot = new THREE.Group();
@@ -363,9 +478,13 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
         if (!(meshID in meshes)) {
           geometry = new THREE.BufferGeometry();
 
-          let vertex_buffer = model.mesh_vert.subarray(
+          // Copy out of the wasm heap: heap growth (e.g. allocating another
+          // MjData later) detaches all existing views, which would silently
+          // empty any geometry that aliased them. The copy also keeps the
+          // coordinate swizzle below from corrupting the model's own data.
+          let vertex_buffer = new Float32Array(model.mesh_vert.subarray(
              model.mesh_vertadr[meshID] * 3,
-            (model.mesh_vertadr[meshID]  + model.mesh_vertnum[meshID]) * 3);
+            (model.mesh_vertadr[meshID]  + model.mesh_vertnum[meshID]) * 3));
           for (let v = 0; v < vertex_buffer.length; v+=3){
             //vertex_buffer[v + 0] =  vertex_buffer[v + 0];
             let temp             =  vertex_buffer[v + 1];
@@ -373,9 +492,9 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
             vertex_buffer[v + 2] = -temp;
           }
 
-          let normal_buffer = model.mesh_normal.subarray(
+          let normal_buffer = new Float32Array(model.mesh_normal.subarray(
              model.mesh_normaladr[meshID] * 3,
-            (model.mesh_normaladr[meshID]  + model.mesh_normalnum[meshID]) * 3);
+            (model.mesh_normaladr[meshID]  + model.mesh_normalnum[meshID]) * 3));
           for (let v = 0; v < normal_buffer.length; v+=3){
             //normal_buffer[v + 0] =  normal_buffer[v + 0];
             let temp             =  normal_buffer[v + 1];
@@ -498,7 +617,8 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       let currentMaterial = new THREE.MeshPhysicalMaterial({
         color: new THREE.Color(color[0], color[1], color[2]),
         transparent: color[3] < 1.0,
-        opacity: color[3]/255.,
+        opacity: color[3], // rgba alpha is already 0..1
+
         specularIntensity: model.geom_matid[g] != -1 ?       model.mat_specular   [model.geom_matid[g]] : undefined,
         reflectivity     : model.geom_matid[g] != -1 ?       model.mat_reflectance[model.geom_matid[g]] : undefined,
         roughness        : model.geom_matid[g] != -1 ? 1.0 - model.mat_shininess  [model.geom_matid[g]] : undefined,
@@ -593,6 +713,25 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     parent.mujocoRoot = mujocoRoot;
 
     return [model, data, bodies, lights];
+}
+
+/** Put the actuated arm joints at the model's home keyframe and hold them
+ *  there. Copies only joint-transmission actuators' joints: the keyframe
+ *  comes from the bare arm model and is zero-padded for the rest of the
+ *  scene, so a full mj_resetDataKeyframe would teleport free bodies to the
+ *  origin. Used at scene load and when a headset recenter resets the scene.
+ * @param {mujoco} mujoco @param {mujoco.MjModel} model @param {mujoco.MjData} data */
+export function applyTeleopHomeKeyframe(mujoco, model, data) {
+  if (model.nkey > 0) {
+    for (let a = 0; a < model.nu; a++) {
+      if (model.actuator_trntype[a] == 0) { // mjTRN_JOINT
+        let adr = model.jnt_qposadr[model.actuator_trnid[2 * a]];
+        data.qpos[adr] = model.key_qpos[adr];
+        data.ctrl[a] = model.key_qpos[adr];
+      }
+    }
+  }
+  mujoco.mj_forward(model, data);
 }
 
 /** Tint sleeping bodies blue (island sleep, MuJoCo 3.4+). body_awake is
@@ -744,7 +883,10 @@ export async function downloadExampleScenesFolder(mujoco) {
     "ufactory_xarm7/assets/right_inner_knuckle.stl",
     "ufactory_xarm7/assets/right_outer_knuckle.stl",
     "ufactory_xarm7/scene.xml",
+    "ufactory_xarm7/scene_teleop.xml",
+    "ufactory_xarm7/scene_hand_teleop.xml",
     "ufactory_xarm7/xarm7.xml",
+    "ufactory_xarm7/xarm7_hand.xml",
     "model_with_tendon.xml",
   ];
 
