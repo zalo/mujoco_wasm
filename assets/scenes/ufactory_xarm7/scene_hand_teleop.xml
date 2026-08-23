@@ -32,9 +32,9 @@
     </body>
 
     <!-- A table of cubes to pick up. -->
-    <geom name="table" type="box" size=".15 .12 .375" pos="0 -.45 .375" rgba=".45 .5 .55 1"/>
-    <body pos="-.09 -.43 .775"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".85 .6 .3 1"/></body>
-    <body pos="0 -.47 .775"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".4 .7 .45 1"/></body>
-    <body pos=".09 -.43 .775"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".45 .55 .8 1"/></body>
+    <geom name="table" type="box" size=".15 .12 .5" pos="0 -.45 .5" rgba=".45 .5 .55 1"/>
+    <body pos="-.09 -.43 1.025"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".85 .6 .3 1"/></body>
+    <body pos="0 -.47 1.025"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".4 .7 .45 1"/></body>
+    <body pos=".09 -.43 1.025"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".45 .55 .8 1"/></body>
   </worldbody>
 </mujoco>

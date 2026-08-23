@@ -111,10 +111,16 @@ export class MuJoCoDemo {
     this.renderer.xr.enabled = true;
     document.body.appendChild(VRButton.createButton(this.renderer, { optionalFeatures: ['hand-tracking'] }));
     this.renderer.xr.addEventListener('sessionstart', () => {
-      // In teleop scenes the user stands AT the robot's mounting column, so
-      // the robot arm works where their own arm does.
-      this.cameraRig.position.set(0, 0, this.teleop ? 0.2 : 2.0);
-      this.cameraRig.rotation.set(0, 0, 0);
+      // In teleop scenes the user stands AT the robot's mounting column,
+      // yawed 180 degrees so they face the cube table, and the robot arm
+      // works where their own arm does (absolute-coordinate tracking).
+      if (this.teleop) {
+        this.cameraRig.position.set(0, 0, -0.25);
+        this.cameraRig.rotation.set(0, Math.PI, 0);
+      } else {
+        this.cameraRig.position.set(0, 0, 2.0);
+        this.cameraRig.rotation.set(0, 0, 0);
+      }
       // Reset the scene and recalibrate the teleop origin, now and whenever
       // the user recenters their headset (long-press the system button).
       this.pendingSceneReset = true;
@@ -126,6 +132,7 @@ export class MuJoCoDemo {
     this.renderer.xr.addEventListener('sessionend', () => {
       // Restore the desktop camera; the headset overwrote its transform.
       this.cameraRig.position.set(0, 0, 0);
+      this.cameraRig.rotation.set(0, 0, 0);
       this.camera.position.set(2.0, 1.7, 1.7);
       this.controls.target.set(0, 0.7, 0);
       this.controls.update();
@@ -176,10 +183,9 @@ export class MuJoCoDemo {
     this.renderer.setSize( window.innerWidth, window.innerHeight );
   }
 
-  /** Delta-teleop calibration: capture the user's wrist pose, mapping it to
-   *  the robot target's current position, and capture the neutral fingertip
-   *  layout (with per-finger human-to-robot scale factors) so fingertip
-   *  motion retargets as scaled deltas around this pose. */
+  /** Fingertip calibration: capture the neutral fingertip layout (with
+   *  per-finger human-to-robot scale factors) so fingertip motion retargets
+   *  as scaled deltas around this pose. */
   captureTeleopOrigin(handPose, mocapId) {
     const sid = this.teleop.tcpSiteId;
     const sp = this.data.site_xpos, sm = this.data.site_xmat;
@@ -209,17 +215,7 @@ export class MuJoCoDemo {
       // curls; without it the robot fingers visibly under-close.
       scale.push(Math.min(Math.max(1.25 * robotLen / humanLen, 0.6), 2.0));
     }
-    return {
-      wristPos: handPose.wristPos.clone(),
-      // Calibration maps the wrist onto the scene's HOME target (the mocap
-      // body's model position), so recentering always plants the middle of
-      // the arm's workspace at the user's current hand position.
-      targetPos: [
-        this.model.body_pos[(this.teleop.bodyID * 3) + 0],
-        this.model.body_pos[(this.teleop.bodyID * 3) + 1],
-        this.model.body_pos[(this.teleop.bodyID * 3) + 2]],
-      tipNeutral: tipNeutral, tipHome: tipHome, scale: scale,
-    };
+    return { tipNeutral: tipNeutral, tipHome: tipHome, scale: scale };
   }
 
   /** Fingertip targets (MuJoCo world) for the dexterous hand: the user's
@@ -301,32 +297,24 @@ export class MuJoCoDemo {
           if (src) {
             let pos = null;
             if (this.teleop.hand && src.hand) {
-              // Dexterous-hand scenes track the wrist in DELTA mode: the
-              // wrist pose at calibration maps onto wherever the robot's
-              // target currently is, so the robot workspace lands inside
-              // the user's comfortable workspace regardless of where they
-              // stand. Recentering the headset recalibrates.
+              // Dexterous-hand scenes track the wrist's ABSOLUTE pose: the
+              // user stands inside the robot's workspace, so the robot palm
+              // goes exactly where their hand is.
               handPose = src.hand;
-              // Calibrate only after the hand has been tracked for a few
-              // frames: the first frames can carry a stale rig transform
-              // (session start) or tracking-acquisition glitches.
+              pos = toMujocoPos(handPose.wristPos.clone());
+              this.tmpQuat.set(handPose.wristQuat.x, -handPose.wristQuat.z, handPose.wristQuat.y, handPose.wristQuat.w);
+              this.tmpQuat.multiply(palmAlignment);
+              // Fingertip retargeting still needs a calibration snapshot of
+              // the neutral hand; wait a few tracked frames first (the
+              // first frames can carry a stale rig transform or
+              // tracking-acquisition glitches).
               if (!this.teleopOrigin) {
                 this.teleopOriginCountdown = (this.teleopOriginCountdown ?? 15) - 1;
-                if (this.teleopOriginCountdown > 0) { handPose = null; }
-                else {
+                if (this.teleopOriginCountdown <= 0) {
                   this.teleopOrigin = this.captureTeleopOrigin(handPose, mocapId);
                   this.teleopOriginCountdown = null;
                 }
               }
-            }
-            if (this.teleop.hand && handPose && this.teleopOrigin) {
-              pos = toMujocoPos(handPose.wristPos.clone().sub(this.teleopOrigin.wristPos));
-              pos.x += this.teleopOrigin.targetPos[0];
-              pos.y += this.teleopOrigin.targetPos[1];
-              pos.z += this.teleopOrigin.targetPos[2];
-              // Wrist orientation -> palm-site orientation (absolute).
-              this.tmpQuat.set(handPose.wristQuat.x, -handPose.wristQuat.z, handPose.wristQuat.y, handPose.wristQuat.w);
-              this.tmpQuat.multiply(palmAlignment);
             } else if (!this.teleop.hand) {
               // Gripper scenes track the hand/controller position absolutely.
               pos = toMujocoPos(src.position.clone());

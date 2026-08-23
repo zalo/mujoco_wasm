@@ -325,12 +325,12 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
           // endsWith: <attach> prefixes actuator names (e.g. "r_gripper").
           if (decodeName(model.name_actuatoradr[a]).endsWith("gripper")) { gripperActId = a; break; }
         }
-        // TCP site: "link_tcp" if present, else a (possibly attach-prefixed)
-        // palm "grasp_site".
+        // TCP site: "link_tcp" if present, else a palm "grasp_site" (both
+        // possibly renamed with an <attach> prefix, hence endsWith).
         let tcpSiteId = -1;
         for (let s = 0; s < model.nsite; s++) {
           let n = decodeName(model.name_siteadr[s]);
-          if (n == "link_tcp") { tcpSiteId = s; break; }
+          if (n.endsWith("link_tcp")) { tcpSiteId = s; break; }
           if (tcpSiteId < 0 && n.endsWith("grasp_site")) { tcpSiteId = s; }
         }
         // Arm actuators: joint-transmission actuators on the kinematic chain

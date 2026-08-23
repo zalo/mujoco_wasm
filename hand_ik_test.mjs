@@ -96,7 +96,7 @@ const toWorld = (l) => {
 
 // T1: palm tracks a reachable target, hand pointing down
 const down = [0, 1, 0, 0];
-let target = [0.09, -0.4, 1.05];
+let target = [0.09, -0.4, 1.2];
 let fingerTargets = null;
 const runFrames = (frames) => {
   for (let f = 0; f < frames; f++) {
