@@ -119,26 +119,34 @@ export class XRInputManager {
     };
   }
 
-  /** Full articulated-hand pose in three.js world space: wrist position and
-   *  orientation plus the five fingertips (thumb, index, middle, ring,
-   *  pinky). Null when hand tracking isn't available on this input. */
+  /** Full articulated-hand pose in three.js world space: wrist and
+   *  middle-knuckle positions, the five fingertips (thumb..pinky), and an
+   *  orthonormal hand frame CONSTRUCTED FROM JOINT POSITIONS — fingers
+   *  (wrist toward middle knuckle), thumbSide (ring toward index knuckle),
+   *  back (their cross product, out of the back of the hand). Building the
+   *  frame geometrically avoids relying on the wrist joint's orientation
+   *  convention, which differs between runtimes. Null when hand tracking
+   *  isn't available. */
   getHandPose(slot) {
     const joints = slot.hand.joints;
     if (!slot.inputSource || !slot.inputSource.hand || !joints) { return null; }
-    const wrist = joints['wrist'];
-    if (!wrist || !wrist.visible) { return null; }
-    const tipNames = ['thumb-tip', 'index-finger-tip', 'middle-finger-tip', 'ring-finger-tip', 'pinky-finger-tip'];
-    const tips = [];
-    for (const name of tipNames) {
+    const names = ['wrist',
+                   'thumb-phalanx-proximal', 'index-finger-phalanx-proximal', 'middle-finger-phalanx-proximal',
+                   'ring-finger-phalanx-proximal', 'pinky-finger-phalanx-proximal',
+                   'thumb-tip', 'index-finger-tip', 'middle-finger-tip', 'ring-finger-tip', 'pinky-finger-tip'];
+    const p = [];
+    for (const name of names) {
       const joint = joints[name];
       if (!joint || !joint.visible) { return null; }
-      tips.push(joint.getWorldPosition(new THREE.Vector3()));
+      p.push(joint.getWorldPosition(new THREE.Vector3()));
     }
-    return {
-      wristPos : wrist.getWorldPosition(new THREE.Vector3()),
-      wristQuat: wrist.getWorldQuaternion(new THREE.Quaternion()),
-      tips     : tips,
-    };
+    const wrist = p[0], knuckles = p.slice(1, 6), tips = p.slice(6);
+    const fingers = knuckles[2].clone().sub(wrist).normalize(); // wrist -> middle knuckle
+    const thumbSide = knuckles[1].clone().sub(knuckles[3]);     // ring -> index knuckle
+    thumbSide.addScaledVector(fingers, -thumbSide.dot(fingers)).normalize();
+    const back = fingers.clone().cross(thumbSide); // out of the back of the hand
+    return { wristPos: wrist, knucklePos: knuckles[2], knuckles: knuckles, tips: tips,
+             thumbSide: thumbSide, back: back, fingers: fingers };
   }
 
   startGrab(slot) {

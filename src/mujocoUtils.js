@@ -351,19 +351,22 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
           }
           // Dexterous hand: fingertip distal bodies (Shadow Hand naming,
           // thumb..pinky); its actuators are everything off the arm chain.
-          const tipSuffixes = ["thdistal", "ffdistal", "mfdistal", "rfdistal", "lfdistal"];
-          let tipBodyIds = tipSuffixes.map((suffix) => {
+          const findBodies = (suffixes) => suffixes.map((suffix) => {
             for (let tb = 0; tb < model.nbody; tb++) {
               if (decodeName(model.name_bodyadr[tb]).endsWith(suffix)) { return tb; }
             }
             return -1;
           });
+          let tipBodyIds = findBodies(["thdistal", "ffdistal", "mfdistal", "rfdistal", "lfdistal"]);
+          let knuckleBodyIds = findBodies(["thproximal", "ffproximal", "mfproximal", "rfproximal", "lfproximal"]);
           if (tipBodyIds.every((id) => id >= 0)) {
             let actIds = [];
             for (let a = 0; a < model.nu; a++) {
               if (!armActIds.includes(a) && a != gripperActId) { actIds.push(a); }
             }
-            if (actIds.length > 0) { hand = { tipBodyIds: tipBodyIds, actIds: actIds }; }
+            if (actIds.length > 0) {
+              hand = { tipBodyIds: tipBodyIds, knuckleBodyIds: knuckleBodyIds, actIds: actIds };
+            }
           }
         }
         parent.teleop = { bodyID: b, gripperActId: gripperActId,

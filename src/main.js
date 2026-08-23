@@ -28,10 +28,15 @@ mujoco.FS.writeFile("/working/" + initialScene, await(await fetch("./assets/scen
 // gripper's +z (finger direction) with the hand's pointing direction.
 const teleopGripAlignment = new THREE.Quaternion(-Math.SQRT1_2, 0, 0, Math.SQRT1_2);
 
-// Rotation of 180 degrees about y, aligning the Shadow Hand's palm-site
-// frame (+z fingers, +x thumb side, -y palm) with the WebXR wrist frame
-// (-z fingers, -x thumb side, -y palm).
-const palmAlignment = new THREE.Quaternion(0, 1, 0, 0);
+// Scratch objects for building the tracked hand's orientation from its
+// geometric frame (thumbSide, back, fingers) — the same axis semantics as
+// the Shadow Hand's palm site (+x thumb side, +y back of hand, +z fingers).
+// The basis is assembled directly in MuJoCo coordinates (each three.js
+// world axis swizzled by (x, -z, y)); conjugating a three.js-built
+// quaternion instead would relabel which local axis is which.
+const handBasis = new THREE.Matrix4();
+const handQuat  = new THREE.Quaternion();
+const mjX = new THREE.Vector3(), mjY = new THREE.Vector3(), mjZ = new THREE.Vector3();
 
 export class MuJoCoDemo {
   constructor() {
@@ -183,37 +188,49 @@ export class MuJoCoDemo {
     this.renderer.setSize( window.innerWidth, window.innerHeight );
   }
 
+  /** Project a world point into the tracked hand's geometric frame, whose
+   *  axes (thumbSide, back, fingers) match the robot palm-site frame. */
+  handLocal(handPose, worldPoint) {
+    const d = worldPoint.clone().sub(handPose.wristPos);
+    return [d.dot(handPose.thumbSide), d.dot(handPose.back), d.dot(handPose.fingers)];
+  }
+
   /** Fingertip calibration: capture the neutral fingertip layout (with
    *  per-finger human-to-robot scale factors) so fingertip motion retargets
    *  as scaled deltas around this pose. */
   captureTeleopOrigin(handPose, mocapId) {
     const sid = this.teleop.tcpSiteId;
     const sp = this.data.site_xpos, sm = this.data.site_xmat;
-    const invWrist = handPose.wristQuat.clone().invert();
-    const palmRoot = [0, 0.035, -0.09]; // approx. palm base in the palm-site frame
+    // World -> palm-site frame (site_xmat is row-major local-to-world).
+    const siteLocal = (wx, wy, wz) => {
+      const d = [wx - sp[(sid * 3) + 0], wy - sp[(sid * 3) + 1], wz - sp[(sid * 3) + 2]];
+      return [
+        sm[(sid * 9) + 0] * d[0] + sm[(sid * 9) + 3] * d[1] + sm[(sid * 9) + 6] * d[2],
+        sm[(sid * 9) + 1] * d[0] + sm[(sid * 9) + 4] * d[1] + sm[(sid * 9) + 7] * d[2],
+        sm[(sid * 9) + 2] * d[0] + sm[(sid * 9) + 5] * d[1] + sm[(sid * 9) + 8] * d[2]];
+    };
     let tipNeutral = [], tipHome = [], scale = [];
     for (let f = 0; f < 5; f++) {
-      const rel = handPose.tips[f].clone().sub(handPose.wristPos).applyQuaternion(invWrist);
-      const neutral = [-rel.x, rel.y, -rel.z]; // WebXR wrist frame -> palm-site axes
+      const neutral = this.handLocal(handPose, handPose.tips[f]);
       tipNeutral.push(neutral);
-      let home = [0, 0, 0];
+      let home = [0, 0, 0], s = 1.0;
       if (this.teleop.hand) {
         const tb = this.teleop.hand.tipBodyIds[f];
-        const d = [
-          this.data.xpos[(tb * 3) + 0] - sp[(sid * 3) + 0],
-          this.data.xpos[(tb * 3) + 1] - sp[(sid * 3) + 1],
-          this.data.xpos[(tb * 3) + 2] - sp[(sid * 3) + 2]];
-        home = [ // R^T * d (site_xmat is row-major local-to-world)
-          sm[(sid * 9) + 0] * d[0] + sm[(sid * 9) + 3] * d[1] + sm[(sid * 9) + 6] * d[2],
-          sm[(sid * 9) + 1] * d[0] + sm[(sid * 9) + 4] * d[1] + sm[(sid * 9) + 7] * d[2],
-          sm[(sid * 9) + 2] * d[0] + sm[(sid * 9) + 5] * d[1] + sm[(sid * 9) + 8] * d[2]];
+        home = siteLocal(this.data.xpos[(tb * 3) + 0], this.data.xpos[(tb * 3) + 1], this.data.xpos[(tb * 3) + 2]);
+        // Per-finger scale from true KNUCKLE-to-tip length ratios: fingertip
+        // deltas fold around the knuckles, so wrist-anchored lengths
+        // overdrive curl depth and push pinch targets behind the palm.
+        const kb = this.teleop.hand.knuckleBodyIds[f];
+        if (kb >= 0) {
+          const rk = siteLocal(this.data.xpos[(kb * 3) + 0], this.data.xpos[(kb * 3) + 1], this.data.xpos[(kb * 3) + 2]);
+          const hk = this.handLocal(handPose, handPose.knuckles[f]);
+          const robotLen = Math.hypot(home[0] - rk[0], home[1] - rk[1], home[2] - rk[2]);
+          const humanLen = Math.max(Math.hypot(neutral[0] - hk[0], neutral[1] - hk[1], neutral[2] - hk[2]), 0.02);
+          s = Math.min(Math.max(robotLen / humanLen, 0.5), 1.5);
+        }
       }
       tipHome.push(home);
-      const robotLen = Math.hypot(home[0] - palmRoot[0], home[1] - palmRoot[1], home[2] - palmRoot[2]);
-      const humanLen = Math.max(Math.hypot(neutral[0], neutral[1], neutral[2]), 0.02);
-      // The 1.25 boost over the pure length ratio deepens the retargeted
-      // curls; without it the robot fingers visibly under-close.
-      scale.push(Math.min(Math.max(1.25 * robotLen / humanLen, 0.6), 2.0));
+      scale.push(s);
     }
     return { tipNeutral: tipNeutral, tipHome: tipHome, scale: scale };
   }
@@ -224,14 +241,13 @@ export class MuJoCoDemo {
   computeFingerTargets(handPose) {
     const o = this.teleopOrigin, sid = this.teleop.tcpSiteId;
     const sp = this.data.site_xpos, sm = this.data.site_xmat;
-    const invWrist = handPose.wristQuat.clone().invert();
     const targets = [];
     for (let f = 0; f < 5; f++) {
-      const rel = handPose.tips[f].clone().sub(handPose.wristPos).applyQuaternion(invWrist);
+      const rel = this.handLocal(handPose, handPose.tips[f]);
       const local = [
-        o.tipHome[f][0] + o.scale[f] * ((-rel.x) - o.tipNeutral[f][0]),
-        o.tipHome[f][1] + o.scale[f] * (( rel.y) - o.tipNeutral[f][1]),
-        o.tipHome[f][2] + o.scale[f] * ((-rel.z) - o.tipNeutral[f][2])];
+        o.tipHome[f][0] + o.scale[f] * (rel[0] - o.tipNeutral[f][0]),
+        o.tipHome[f][1] + o.scale[f] * (rel[1] - o.tipNeutral[f][1]),
+        o.tipHome[f][2] + o.scale[f] * (rel[2] - o.tipNeutral[f][2])];
       targets.push([
         sp[(sid * 3) + 0] + sm[(sid * 9) + 0] * local[0] + sm[(sid * 9) + 1] * local[1] + sm[(sid * 9) + 2] * local[2],
         sp[(sid * 3) + 1] + sm[(sid * 9) + 3] * local[0] + sm[(sid * 9) + 4] * local[1] + sm[(sid * 9) + 5] * local[2],
@@ -297,13 +313,20 @@ export class MuJoCoDemo {
           if (src) {
             let pos = null;
             if (this.teleop.hand && src.hand) {
-              // Dexterous-hand scenes track the wrist's ABSOLUTE pose: the
+              // Dexterous-hand scenes track the hand's ABSOLUTE pose: the
               // user stands inside the robot's workspace, so the robot palm
-              // goes exactly where their hand is.
+              // goes exactly where their hand is. The anchor is the palm
+              // site's position when the robot knuckles coincide with the
+              // human knuckles (the site sits ~3.5cm on the palm side of
+              // the knuckle line), and the orientation comes from the
+              // geometric hand frame, whose axes match the site's.
               handPose = src.hand;
-              pos = toMujocoPos(handPose.wristPos.clone());
-              this.tmpQuat.set(handPose.wristQuat.x, -handPose.wristQuat.z, handPose.wristQuat.y, handPose.wristQuat.w);
-              this.tmpQuat.multiply(palmAlignment);
+              pos = toMujocoPos(handPose.knucklePos.clone().addScaledVector(handPose.back, -0.035));
+              mjX.set(handPose.thumbSide.x, -handPose.thumbSide.z, handPose.thumbSide.y);
+              mjY.set(handPose.back.x,      -handPose.back.z,      handPose.back.y);
+              mjZ.set(handPose.fingers.x,   -handPose.fingers.z,   handPose.fingers.y);
+              handBasis.makeBasis(mjX, mjY, mjZ);
+              this.tmpQuat.setFromRotationMatrix(handBasis);
               // Fingertip retargeting still needs a calibration snapshot of
               // the neutral hand; wait a few tracked frames first (the
               // first frames can carry a stale rig transform or
