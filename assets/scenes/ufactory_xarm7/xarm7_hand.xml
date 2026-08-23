@@ -78,7 +78,7 @@
   </default>
 
   <worldbody>
-    <body name="link_base" pos="0 0 .12" childclass="xarm7">
+    <body name="link_base" pos="0 0 1" childclass="xarm7">
       <inertial pos="-0.021131 -0.0016302 0.056488" quat="0.696843 0.20176 0.10388 0.680376" mass="0.88556"
         diaginertia="0.00382023 0.00335282 0.00167725"/>
       <geom mesh="link_base"/>

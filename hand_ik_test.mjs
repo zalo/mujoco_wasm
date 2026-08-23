@@ -58,7 +58,18 @@ for (let a = 0; a < model.nu; a++) {
 }
 mujoco.mj_forward(model, data);
 
-const ik = new DiffIK(mujoco, model, { siteId: tcpSiteId, armActIds: armActIds });
+// mirror the demo: stiffen weak wrist servos on the chain
+for (const a of armActIds) {
+  if (model.actuator_gainprm[a * 10] < 50) {
+    model.actuator_gainprm[(a * 10) + 0] = 300;
+    model.actuator_biasprm[(a * 10) + 1] = -300;
+    model.actuator_biasprm[(a * 10) + 2] = -30;
+    model.actuator_forcerange[(a * 2) + 0] = -30;
+    model.actuator_forcerange[(a * 2) + 1] = 30;
+  }
+}
+const ik = new DiffIK(mujoco, model, { siteId: tcpSiteId, armActIds: armActIds,
+  reachCenter: [0, 0, 1.3], reachRadius: 0.95 });
 const hr = new HandRetarget(mujoco, model, { tipBodyIds: tipBodyIds, actIds: handActIds });
 
 const FRAME_DT = 1 / 60, STEPS = Math.round(FRAME_DT / model.opt.timestep);
@@ -85,7 +96,7 @@ const toWorld = (l) => {
 
 // T1: palm tracks a reachable target, hand pointing down
 const down = [0, 1, 0, 0];
-let target = [0.09, -0.4, 0.42];
+let target = [0.09, -0.4, 1.05];
 let fingerTargets = null;
 const runFrames = (frames) => {
   for (let f = 0; f < frames; f++) {

@@ -7,7 +7,7 @@ import { DragStateManager } from './utils/DragStateManager.js';
 import { XRInputManager    } from './utils/XRInputManager.js';
 import { DiffIK            } from './utils/DiffIK.js';
 import { HandRetarget      } from './utils/HandRetarget.js';
-import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, drawTendonsAndFlex, updateSleepState, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
+import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, drawTendonsAndFlex, updateSleepState, applyTeleopHomeKeyframe, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
 import   load_mujoco        from '../node_modules/@mujoco/mujoco/mujoco.js';
 
 // Load the MuJoCo Module
@@ -111,15 +111,16 @@ export class MuJoCoDemo {
     this.renderer.xr.enabled = true;
     document.body.appendChild(VRButton.createButton(this.renderer, { optionalFeatures: ['hand-tracking'] }));
     this.renderer.xr.addEventListener('sessionstart', () => {
-      // Stand closer in hand-teleop scenes so the robot is within arm's reach.
-      this.cameraRig.position.set(0, 0, this.teleop ? 1.0 : 2.0);
+      // In teleop scenes the user stands AT the robot's mounting column, so
+      // the robot arm works where their own arm does.
+      this.cameraRig.position.set(0, 0, this.teleop ? 0.2 : 2.0);
       this.cameraRig.rotation.set(0, 0, 0);
-      // Recalibrate the delta-teleop origin, now and whenever the user
-      // recenters their headset (long-press the system button on Quest).
-      this.teleopOrigin = null;
+      // Reset the scene and recalibrate the teleop origin, now and whenever
+      // the user recenters their headset (long-press the system button).
+      this.pendingSceneReset = true;
       const refSpace = this.renderer.xr.getReferenceSpace();
       if (refSpace && refSpace.addEventListener) {
-        refSpace.addEventListener('reset', () => { this.teleopOrigin = null; });
+        refSpace.addEventListener('reset', () => { this.pendingSceneReset = true; });
       }
     });
     this.renderer.xr.addEventListener('sessionend', () => {
@@ -204,7 +205,9 @@ export class MuJoCoDemo {
       tipHome.push(home);
       const robotLen = Math.hypot(home[0] - palmRoot[0], home[1] - palmRoot[1], home[2] - palmRoot[2]);
       const humanLen = Math.max(Math.hypot(neutral[0], neutral[1], neutral[2]), 0.02);
-      scale.push(Math.min(Math.max(robotLen / humanLen, 0.6), 1.6));
+      // The 1.25 boost over the pure length ratio deepens the retargeted
+      // curls; without it the robot fingers visibly under-close.
+      scale.push(Math.min(Math.max(1.25 * robotLen / humanLen, 0.6), 2.0));
     }
     return {
       wristPos: handPose.wristPos.clone(),
@@ -263,6 +266,19 @@ export class MuJoCoDemo {
     // In VR the headset owns the camera pose.
     if (!this.renderer.xr.isPresenting) { this.controls.update(); }
     else { this.xrInput.updateFrame(); }
+
+    // Headset recenter / session start: put the scene back to its initial
+    // state and recalibrate the teleop mapping.
+    if (this.pendingSceneReset) {
+      this.pendingSceneReset = false;
+      if (this.teleop) {
+        mujoco.mj_resetData(this.model, this.data);
+        applyTeleopHomeKeyframe(mujoco, this.model, this.data);
+        this.teleopOrigin = null;
+        if (this.ik) { this.ik.reset(); }
+        if (this.handRetarget) { this.handRetarget.reset(); }
+      }
+    }
 
     if (!this.params["paused"]) {
       let timestep = this.model.opt.timestep;
@@ -324,7 +340,7 @@ export class MuJoCoDemo {
               // Rate-limit the target's travel so tracking jumps (entering VR,
               // tracking reacquisition) sweep the arm smoothly instead of
               // yanking it across the workspace; human-speed motion stays 1:1.
-              let maxStep = 1.5 * dt; // meters, at 1.5 m/s
+              let maxStep = 3.0 * dt; // meters, at 3 m/s
               this.tmpVec.set(
                 pos.x - this.data.mocap_pos[(mocapId * 3) + 0],
                 pos.y - this.data.mocap_pos[(mocapId * 3) + 1],
@@ -355,8 +371,18 @@ export class MuJoCoDemo {
         if (this.teleop.tcpSiteId >= 0) {
           if (!this.ik || this.ik.model != this.model) {
             if (this.ik) { this.ik.dispose(); }
-            this.ik = new DiffIK(mujoco, this.model,
-              { siteId: this.teleop.tcpSiteId, armActIds: this.teleop.armActIds });
+            // Center the reach sphere on the arm's mounting point (the
+            // chain body closest to the world), wherever the scene put it.
+            let rootBody = this.model.site_bodyid[this.teleop.tcpSiteId];
+            while (this.model.body_parentid[rootBody] != 0) { rootBody = this.model.body_parentid[rootBody]; }
+            this.ik = new DiffIK(mujoco, this.model, {
+              siteId: this.teleop.tcpSiteId, armActIds: this.teleop.armActIds,
+              reachCenter: [
+                this.data.xpos[(rootBody * 3) + 0],
+                this.data.xpos[(rootBody * 3) + 1],
+                this.data.xpos[(rootBody * 3) + 2] + 0.3],
+              reachRadius: 0.95,
+            });
           }
           let target = [
             this.data.mocap_pos[(mocapId * 3) + 0],

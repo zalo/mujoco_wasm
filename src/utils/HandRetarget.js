@@ -23,11 +23,11 @@ export class HandRetarget {
     this.tipBodyIds  = [...opts.tipBodyIds]; // thumb, index, middle, ring, pinky
     this.actIds      = [...opts.actIds];
     this.damping     = opts.damping     ?? 1e-3;
-    this.maxVel      = opts.maxVel      ?? 2.5;   // actuator-space rad/s
+    this.maxVel      = opts.maxVel      ?? 3.5;   // actuator-space rad/s
     // Finger position servos are weak (kp ~0.4-1.5), so a large command lead
     // winds up past the target before the measured tips catch up; keep the
     // leash short to bound the overshoot.
-    this.leash       = opts.leash       ?? 0.15;  // rad, command lead over measured
+    this.leash       = opts.leash       ?? 0.3;   // rad, command lead over measured
     this.clearance   = opts.clearance   ?? 0.015; // m, bounding-sphere height
     this.floorZ      = opts.floorZ      ?? 0.0;
 
@@ -72,6 +72,10 @@ export class HandRetarget {
     this.commandInitialized = false;
     this.status = { groundLimited: false };
   }
+
+  /** Re-seed the command trajectory from the current actuator lengths (call
+   *  after externally resetting the simulation state). */
+  reset() { this.commandInitialized = false; }
 
   /** Minimum bounding-sphere height above the floor with the candidate
    *  actuator commands applied kinematically (coupled joints split evenly). */

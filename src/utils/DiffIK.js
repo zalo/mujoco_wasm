@@ -26,9 +26,19 @@ export class DiffIK {
 
     this.siteId      = opts.siteId;
     this.damping     = opts.damping     ?? 1e-4;  // DLS regularization (task space)
-    this.maxJointVel = opts.maxJointVel ?? 2.0;   // rad/s per joint
+    this.maxJointVel = opts.maxJointVel ?? 3.0;   // rad/s per joint
     this.leash       = opts.leash       ?? 0.2;   // rad, max command lead over measured qpos
-    this.nullGain    = opts.nullGain    ?? 0.3;   // posture task gain (rad/s per rad)
+    this.nullGain    = opts.nullGain    ?? 0.5;   // posture task gain (rad/s per rad)
+    // Task velocity law: correct taskGain-per-second of the remaining error
+    // (~125ms time constant) rather than the full error every cycle. A
+    // full-step correction at 60Hz is an effective gain of 60/s, which
+    // limit-cycles against the actuator + inertia lag (felt as oscillation
+    // / rubber-banding around the target).
+    this.taskGain    = opts.taskGain    ?? 8.0;
+    // Orientation rows are weighted below position rows: radians numerically
+    // dominate meters, and unweighted they starve position tracking (felt
+    // as rubber-banding around the target).
+    this.oriWeight   = opts.oriWeight   ?? 0.5;
     // Commands are gated at `clearance`; the margin also absorbs the real
     // arm's gravity sag below its position commands (~10mm at stock gains).
     this.clearance   = opts.clearance   ?? 0.020; // m, min bounding-sphere height
@@ -62,6 +72,7 @@ export class DiffIK {
       for (let p = b; p != 0; p = model.body_parentid[p]) { joints += model.body_jntnum[p]; }
       if (joints > 0) { this.guardGeoms.push(g); }
     }
+    this.guardSet = new Set(this.guardGeoms);
 
     // Rest posture for the nullspace task: the model's first keyframe if it
     // has one (e.g. the xArm7 "home" pose), else zeros. Redundant arms need
@@ -87,8 +98,12 @@ export class DiffIK {
     // physically blocked.
     this.lastCommand = new Float64Array(this.narm);
     this.commandInitialized = false;
-    this.status = { targetClamped: false, groundLimited: false };
+    this.status = { targetClamped: false, groundLimited: false, selfCollisionLimited: false };
   }
+
+  /** Re-seed the command trajectory from the current joint positions (call
+   *  after externally resetting the simulation state). */
+  reset() { this.commandInitialized = false; }
 
   /** Clamp a task-space target (in place) above the floor and into reach. */
   clampTarget(t) {
@@ -107,18 +122,34 @@ export class DiffIK {
     return t;
   }
 
-  /** Minimum height (above floorZ) of any guarded geom's bounding-sphere
-   *  bottom, for the given arm command evaluated kinematically. */
-  minClearance(data, cmd) {
-    const m = this.model, shadow = this.shadow;
+  /** Kinematically evaluate an arm command on the shadow data: the minimum
+   *  height (above floorZ) of any guarded geom's bounding-sphere bottom,
+   *  and the robot's total self-collision penetration depth. */
+  evaluateCommand(data, cmd) {
+    const m = this.model, shadow = this.shadow, mujoco = this.mujoco;
     shadow.qpos.set(data.qpos);
     for (let i = 0; i < this.narm; i++) { shadow.qpos[this.armQposAdr[i]] = cmd[i]; }
-    this.mujoco.mj_kinematics(m, shadow);
-    let min = Infinity;
+    mujoco.mj_kinematics(m, shadow);
+    let clearance = Infinity;
     for (const g of this.guardGeoms) {
-      min = Math.min(min, shadow.geom_xpos[(g * 3) + 2] - m.geom_rbound[g] - this.floorZ);
+      clearance = Math.min(clearance, shadow.geom_xpos[(g * 3) + 2] - m.geom_rbound[g] - this.floorZ);
     }
-    return min;
+    // Self-collision: narrowphase over the shadow pose, counting only
+    // penetrating contacts where both geoms belong to the robot. The embind
+    // vector handle and each contact copy are heap objects that must be
+    // deleted, or this leaks ~100KB per call.
+    let selfPenetration = 0;
+    mujoco.mj_collision(m, shadow);
+    const contacts = shadow.contact;
+    for (let i = 0; i < shadow.ncon; i++) {
+      const con = contacts.get(i);
+      if (con.dist < -1e-4 && this.guardSet.has(con.geom1) && this.guardSet.has(con.geom2)) {
+        selfPenetration -= con.dist;
+      }
+      con.delete();
+    }
+    contacts.delete();
+    return { clearance: clearance, selfPenetration: selfPenetration };
   }
 
   /** One IK cycle: solve toward (targetPos, targetQuat) — both in MuJoCo
@@ -139,14 +170,15 @@ export class DiffIK {
     mujoco.mju_mulQuat(this.errqB, [...targetQuat], [...this.negqB.GetView()]);
     mujoco.mju_quat2Vel(this.errvB, [...this.errqB.GetView()], 1.0);
     const ev = this.errvB.GetView();
-    err[3] = ev[0]; err[4] = ev[1]; err[5] = ev[2];
+    const w = this.oriWeight;
+    err[3] = ev[0] * w; err[4] = ev[1] * w; err[5] = ev[2] * w;
 
-    // 6 x narm Jacobian (arm dof columns only).
+    // 6 x narm Jacobian (arm dof columns only), orientation rows weighted.
     mujoco.mj_jacSite(m, data, this.jacp, this.jacr, this.siteId);
     const jp = this.jacp.GetView(), jr = this.jacr.GetView();
     const J = [];
     for (let r = 0; r < 3; r++) { J.push(this.armDofAdr.map((d) => jp[r * nv + d])); }
-    for (let r = 0; r < 3; r++) { J.push(this.armDofAdr.map((d) => jr[r * nv + d])); }
+    for (let r = 0; r < 3; r++) { J.push(this.armDofAdr.map((d) => jr[r * nv + d] * w)); }
 
     // Damped least squares: dq = J^T (J J^T + lambda I)^-1 err.
     const A = [];
@@ -158,14 +190,17 @@ export class DiffIK {
         A[i].push(s);
       }
     }
+    const dtc = Math.min(Math.max(dt, 1e-3), 0.1);
     const y = solveLinear(A, err);
     const dq = new Array(n).fill(0);
+    const gain = Math.min(this.taskGain * dtc, 1.0);
     for (let k = 0; k < n; k++) {
       for (let i = 0; i < 6; i++) { dq[k] += J[i][k] * y[i]; }
+      dq[k] *= gain;
     }
 
     // Nullspace posture task: pull toward the rest pose without disturbing
-    // the end-effector: dq += (I - J^+ J) * nullGain * (q_rest - q).
+    // the end-effector: dq += (I - J^+ J) * nullGain * (q_rest - q) * dt.
     const dqn = this.restPose.map((q0, k) => this.nullGain * (q0 - data.qpos[this.armQposAdr[k]]));
     const Jdqn = new Array(6).fill(0);
     for (let i = 0; i < 6; i++) {
@@ -175,11 +210,11 @@ export class DiffIK {
     for (let k = 0; k < n; k++) {
       let proj = 0;
       for (let i = 0; i < 6; i++) { proj += J[i][k] * y2[i]; }
-      dq[k] += dqn[k] - proj;
+      dq[k] += (dqn[k] - proj) * dtc;
     }
 
-    // Joint-velocity limit: bound this cycle's step to maxJointVel * dt.
-    const maxStep = this.maxJointVel * Math.min(Math.max(dt, 1e-3), 0.1);
+    // Joint-velocity limit.
+    const maxStep = this.maxJointVel * dtc;
     const worst = Math.max(...dq.map(Math.abs));
     if (worst > maxStep) { for (let k = 0; k < n; k++) { dq[k] *= maxStep / worst; } }
 
@@ -206,18 +241,38 @@ export class DiffIK {
       }
     };
 
-    // Ground-clearance gate: accept the largest fraction of the step whose
-    // clearance is either above the margin, or no worse than the current
-    // command's (so a pose already inside the margin — startup, actuator
-    // overshoot — can always climb back out instead of deadlocking).
+    // Safety gate: accept the largest fraction of the step whose ground
+    // clearance is above the margin (or no worse than the current command's,
+    // so a pose already inside the margin — startup, actuator overshoot —
+    // can always climb back out instead of deadlocking), and whose
+    // self-collision penetration does not increase.
     this.status.groundLimited = false;
-    const nowClearance = this.minClearance(data, [...this.lastCommand]);
+    this.status.selfCollisionLimited = false;
+    this.status.retreating = false;
+    const now = this.evaluateCommand(data, [...this.lastCommand]);
+    const gateOK = (c) => {
+      const groundOK = c.clearance >= this.clearance || c.clearance >= now.clearance - 1e-6;
+      const selfOK   = c.selfPenetration <= now.selfPenetration + 1e-6;
+      if (!groundOK) { this.status.groundLimited = true; }
+      if (!selfOK)   { this.status.selfCollisionLimited = true; }
+      return groundOK && selfOK;
+    };
     let accepted = false;
     for (const scale of [1.0, 0.5, 0.25, 0.125]) {
       buildCmd(scale);
-      const c = this.minClearance(data, cmd);
-      if (c >= this.clearance || c >= nowClearance - 1e-6) { accepted = true; break; }
-      this.status.groundLimited = true;
+      if (gateOK(this.evaluateCommand(data, cmd))) { accepted = true; break; }
+    }
+    if (!accepted) {
+      // Every step toward the target is blocked (typically by the
+      // self-collision gate in a contorted configuration): retreat toward
+      // the rest pose instead of freezing — it is collision-free by
+      // construction, and untangling usually re-opens the path.
+      for (let k = 0; k < n; k++) {
+        const q0 = this.restPose[k], c0 = this.lastCommand[k];
+        dq[k] = Math.min(Math.max(q0 - c0, -maxStep), maxStep);
+      }
+      buildCmd(1.0);
+      if (gateOK(this.evaluateCommand(data, cmd))) { accepted = true; this.status.retreating = true; }
     }
     if (accepted) {
       for (let k = 0; k < n; k++) {

@@ -1,17 +1,21 @@
 <mujoco model="xArm7 Hand Teleop">
   <!--
-    Hand-teleoperation scene using the stock, fully actuated xArm7. The red
-    "hand_target" mocap body is only a marker: differential inverse
-    kinematics (see src/utils/DiffIK.js) drives the arm's position actuators
-    toward it, with command-level safeties that keep the arm clear of the
-    ground. In VR the target follows your hand pose, and your pinch diameter
-    (or controller trigger) closes the gripper.
+    Hand-teleoperation scene using the stock, fully actuated xArm7,
+    grafted onto a 1m column with <attach> so the gripper works at hand
+    height while you stand at the column. The red "hand_target" mocap body
+    is only a marker: differential inverse kinematics (src/utils/DiffIK.js)
+    drives the arm's position actuators toward it, with command-level
+    safeties that keep the arm clear of the ground. In VR the target
+    follows your hand pose, and your pinch diameter (or controller
+    trigger) closes the gripper.
   -->
-  <include file="xarm7.xml"/>
+  <asset>
+    <model name="xarm7" file="xarm7.xml"/>
+  </asset>
 
   <!-- The noslip solver stops grasped objects from slowly creeping out of
        the gripper's finger pads during long holds. -->
-  <option noslip_iterations="3"/>
+  <option integrator="implicitfast" noslip_iterations="3"/>
 
   <visual>
     <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
@@ -20,19 +24,23 @@
   </visual>
 
   <worldbody>
-    <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+    <light pos="0 0 2.5" dir="0 0 -1" directional="true"/>
     <geom name="floor" size="0 0 0.05" type="plane"/>
-    <geom name="pedestal" type="cylinder" size=".06 .06" pos="0 0 .06" rgba="1 1 1 1"/>
+    <geom name="column" type="cylinder" size=".05 .5" pos="0 0 .5" rgba="1 1 1 1"/>
+    <!-- The arm model's link_base sits 0.12 above its own origin. -->
+    <frame pos="0 0 .88">
+      <attach model="xarm7" body="link_base" prefix="r_"/>
+    </frame>
 
-    <!-- IK target marker: driven by the VR hand, no constraint attached. -->
-    <body name="hand_target" mocap="true" pos="0 -.35 .5" quat="0 1 0 0">
+    <!-- Where the gripper should be: driven by the VR hand. -->
+    <body name="hand_target" mocap="true" pos="0 -.35 1" quat="0 1 0 0">
       <geom type="sphere" size=".02" contype="0" conaffinity="0" rgba=".9 .3 .3 .4" group="2"/>
     </body>
 
-    <!-- A platform of cubes to pick up. -->
-    <geom name="platform" type="box" size=".15 .12 .1" pos="0 -.42 .1" rgba=".45 .5 .55 1"/>
-    <body pos="-.09 -.4 .225"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".85 .6 .3 1"/></body>
-    <body pos="0 -.44 .225"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".4 .7 .45 1"/></body>
-    <body pos=".09 -.4 .225"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".45 .55 .8 1"/></body>
+    <!-- A table of cubes to pick up. -->
+    <geom name="table" type="box" size=".15 .12 .375" pos="0 -.45 .375" rgba=".45 .5 .55 1"/>
+    <body pos="-.09 -.43 .775"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".85 .6 .3 1"/></body>
+    <body pos="0 -.47 .775"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".4 .7 .45 1"/></body>
+    <body pos=".09 -.43 .775"><freejoint/><geom type="box" size=".02 .02 .02" rgba=".45 .55 .8 1"/></body>
   </worldbody>
 </mujoco>

@@ -322,7 +322,8 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       if (model.body_mocapid[b] >= 0 && decodeName(model.name_bodyadr[b]) == "hand_target") {
         let gripperActId = -1;
         for (let a = 0; a < model.nu; a++) {
-          if (decodeName(model.name_actuatoradr[a]) == "gripper") { gripperActId = a; break; }
+          // endsWith: <attach> prefixes actuator names (e.g. "r_gripper").
+          if (decodeName(model.name_actuatoradr[a]).endsWith("gripper")) { gripperActId = a; break; }
         }
         // TCP site: "link_tcp" if present, else a (possibly attach-prefixed)
         // palm "grasp_site".
@@ -372,20 +373,24 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
       }
     }
 
-    // Teleop scenes start with the arm at its home keyframe: qpos0 for arms
-    // like the xArm7 is a folded pose against joint limits that IK can stall
-    // in. Copy only the actuated arm joints (the keyframe comes from the bare
-    // arm model and is zero-padded for the rest of the scene, so a full
-    // mj_resetDataKeyframe would teleport free bodies to the origin).
-    if (parent.teleop && model.nkey > 0) {
-      for (let a = 0; a < model.nu; a++) {
-        if (model.actuator_trntype[a] == 0) { // mjTRN_JOINT
-          let adr = model.jnt_qposadr[model.actuator_trnid[2 * a]];
-          data.qpos[adr] = model.key_qpos[adr];
-          data.ctrl[a] = model.key_qpos[adr];
+    // Teleop scenes start with the arm at its home keyframe (qpos0 for arms
+    // like the xArm7 is a folded pose against joint limits that IK can
+    // stall in), and with weak wrist servos stiffened.
+    if (parent.teleop) {
+      applyTeleopHomeKeyframe(mujoco, model, data);
+      // The Shadow Hand's wrist actuators as shipped are far too weak to
+      // carry the hand at speed on the end of an arm (kp ~10 against a
+      // ~2.5kg hand), which reads as rubber-banding; stiffen any weak
+      // position servos on the arm's IK chain.
+      for (const a of parent.teleop.armActIds) {
+        if (model.actuator_gainprm[a * 10] < 50) {
+          model.actuator_gainprm[(a * 10) + 0] = 300;
+          model.actuator_biasprm[(a * 10) + 1] = -300;
+          model.actuator_biasprm[(a * 10) + 2] = -30;
+          model.actuator_forcerange[(a * 2) + 0] = -30;
+          model.actuator_forcerange[(a * 2) + 1] = 30;
         }
       }
-      mujoco.mj_forward(model, data);
     }
 
     // Create the root object.
@@ -691,6 +696,25 @@ export async function loadSceneFromURL(mujoco, filename, parent) {
     parent.mujocoRoot = mujocoRoot;
 
     return [model, data, bodies, lights];
+}
+
+/** Put the actuated arm joints at the model's home keyframe and hold them
+ *  there. Copies only joint-transmission actuators' joints: the keyframe
+ *  comes from the bare arm model and is zero-padded for the rest of the
+ *  scene, so a full mj_resetDataKeyframe would teleport free bodies to the
+ *  origin. Used at scene load and when a headset recenter resets the scene.
+ * @param {mujoco} mujoco @param {mujoco.MjModel} model @param {mujoco.MjData} data */
+export function applyTeleopHomeKeyframe(mujoco, model, data) {
+  if (model.nkey > 0) {
+    for (let a = 0; a < model.nu; a++) {
+      if (model.actuator_trntype[a] == 0) { // mjTRN_JOINT
+        let adr = model.jnt_qposadr[model.actuator_trnid[2 * a]];
+        data.qpos[adr] = model.key_qpos[adr];
+        data.ctrl[a] = model.key_qpos[adr];
+      }
+    }
+  }
+  mujoco.mj_forward(model, data);
 }
 
 /** Tint sleeping bodies blue (island sleep, MuJoCo 3.4+). body_awake is
