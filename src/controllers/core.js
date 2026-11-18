@@ -6,7 +6,8 @@ export class Core {
   constructor(mujoco, m, d, idx) {
     this.mj = mujoco; this.m = m; this.d = d; this.idx = idx;
     this.nv = m.nv; this.nu = m.nu;
-    this.mass = m.body_subtreemass[1];
+    this.root = idx.B.torso;                 // tree root of the robot (other free bodies may exist in the scene)
+    this.mass = m.body_subtreemass[this.root];
     this.g = 9.81;
     // wasm-side scratch buffers (must be .delete()d in dispose)
     this.jp = [new mujoco.DoubleBuffer(3 * m.nv), new mujoco.DoubleBuffer(3 * m.nv)];
@@ -34,13 +35,14 @@ export class Core {
   update() {
     const { mj, m, d, idx } = this;
     // COM position (fresh after mj_step1) and velocity via the COM Jacobian
-    for (let k = 0; k < 3; k++) this.com[k] = d.subtree_com[3 + k];
-    mj.mj_jacSubtreeCom(m, d, this.jcom, 1);
+    const r = this.root;
+    for (let k = 0; k < 3; k++) this.com[k] = d.subtree_com[3 * r + k];
+    mj.mj_jacSubtreeCom(m, d, this.jcom, r);
     const Jc = this.jcom.GetView(), qv = d.qvel, nv = this.nv;
     for (let k = 0; k < 3; k++) { let s = 0; for (let j = 0; j < nv; j++) s += Jc[k * nv + j] * qv[j]; this.vcom[k] = s; }
     // centroidal angular momentum (about the COM, world frame)
     mj.mj_subtreeVel(m, d);
-    this.Lcom[0] = d.subtree_angmom[3]; this.Lcom[1] = d.subtree_angmom[4]; this.Lcom[2] = d.subtree_angmom[5];
+    this.Lcom[0] = d.subtree_angmom[3 * r]; this.Lcom[1] = d.subtree_angmom[3 * r + 1]; this.Lcom[2] = d.subtree_angmom[3 * r + 2];
     // feet
     for (let f = 0; f < 2; f++) {
       const b = this.footBody[f], o = 9 * b, c = this.footCenterLocal;

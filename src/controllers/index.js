@@ -10,3 +10,9 @@ export function createController(mujoco, model, data, opts = {}) {
   if (isHumanoidModel(mujoco, model)) return new AnalyticHumanoidController(mujoco, model, data, opts);
   return null;
 }
+export { SwordPlayer, MOVE_NAMES, KATA } from './swordMoves.js';
+
+/** True if the scene's humanoid holds the training sword (humanoid_sword.xml). */
+export function hasSword(mujoco, model) {
+  return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM.value, 'sword_blade') >= 0;
+}

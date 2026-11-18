@@ -65,6 +65,8 @@ export class AnalyticHumanoidController {
     this.hipBoost = 1;
     this.setHipBoost(opts.hipBoost ?? 2);
     this.core = new Core(mujoco, model, data, this.idx);
+    this.mulMRes = new mujoco.DoubleBuffer(model.nv);   // scratch for M * qdd (arm inertia feed-forward)
+    this.qddVec = new Array(model.nv).fill(0);
     this.reset();
   }
 
@@ -96,6 +98,7 @@ export class AnalyticHumanoidController {
   dispose() {
     if (!this.core) return;
     this.core.dispose(); this.core = null;
+    this.mulMRes.delete(); this.mulMRes = null;
     // leave the model as we found it (the model may outlive the controller if the user toggles it off)
     try { this.setHipBoost(1); } catch (e) { /* model already deleted */ }
   }
@@ -124,7 +127,8 @@ export class AnalyticHumanoidController {
       core.writeLimp();
       return;
     }
-    S.armOverride = cmd.arms || null;
+    S.armOverride = cmd.arms || null;   // per arm: [s1, s2, elbow] pose, or { q, qd?, qdd?, kp?, kd? } trajectory sample
+    S.torsoRef = cmd.torso || null;     // { q: [abdomen_z, abdomen_y, abdomen_x], qd? }
     if (S.yawDes === null) S.yawDes = core.yawPelvis;
     S.t += m.opt.timestep;
     if (S.mode === 'stand') {
@@ -148,16 +152,37 @@ export class AnalyticHumanoidController {
   }
 
   _upperBody() {
-    const { core, d, idx, P, S } = this;
-    for (const n of ['abdomen_z', 'abdomen_y', 'abdomen_x']) core.pd(n, 0, P.kpAbd, P.kdAbd);
-    // arms: pose + counter-swing with the opposite leg
+    const { core, d, idx, P, S, m } = this;
+    const abd = ['abdomen_z', 'abdomen_y', 'abdomen_x'], T = S.torsoRef;
+    for (let k = 0; k < 3; k++) {
+      const J = idx.J[abd[k]];
+      core.pd(abd[k], T ? clamp(T.q[k], J.lo + 0.05, J.hi - 0.05) : 0, P.kpAbd, P.kdAbd, T && T.qd ? T.qd[k] : 0);
+    }
+    // arms: pose + counter-swing with the opposite leg, or a tracked trajectory (sword moves)
     const hyR = d.qpos[idx.J.hip_y_right.q], hyL = d.qpos[idx.J.hip_y_left.q];
+    const armJ = ['shoulder1', 'shoulder2', 'elbow'];
+    let ff = false;
     for (let s = 0; s < 2; s++) {
       const A = (S.armOverride && S.armOverride[s]) || P.armPose;
-      const sw = S.mode === 'walk' ? P.armSwing * 0.5 * (s === 0 ? (hyR - hyL) : (hyL - hyR)) : 0;
-      core.pd(jn('shoulder1', s), A[0], P.kpArm, P.kdArm);
-      core.pd(jn('shoulder2', s), A[1] + sw, P.kpArm, P.kdArm);
-      core.pd(jn('elbow', s), A[2], P.kpArm, P.kdArm);
+      if (Array.isArray(A)) {
+        const sw = S.mode === 'walk' ? P.armSwing * 0.5 * (s === 0 ? (hyR - hyL) : (hyL - hyR)) : 0;
+        core.pd(jn('shoulder1', s), A[0], P.kpArm, P.kdArm);
+        core.pd(jn('shoulder2', s), A[1] + sw, P.kpArm, P.kdArm);
+        core.pd(jn('elbow', s), A[2], P.kpArm, P.kdArm);
+      } else {
+        for (let k = 0; k < 3; k++) {
+          const J = idx.J[jn(armJ[k], s)];
+          core.pd(jn(armJ[k], s), clamp(A.q[k], J.lo, J.hi), A.kp ? A.kp[k] : P.kpArm, A.kd ? A.kd[k] : P.kdArm, A.qd ? A.qd[k] : 0);
+          this.qddVec[J.d] = A.qdd ? A.qdd[k] : 0;
+          if (A.qdd) ff = true;
+        }
+      }
+    }
+    if (ff) {
+      // computed-torque feed-forward for tracked arm trajectories: tau_arm += (M qdd_des)_arm (qM is fresh after mj_step1)
+      this.mujoco.mj_mulM(m, d, this.mulMRes, this.qddVec);
+      const r = this.mulMRes.GetView();
+      for (let s = 0; s < 2; s++) for (const a of armJ) { const J = idx.J[jn(a, s)]; core.tau[J.d] += r[J.d]; this.qddVec[J.d] = 0; }
     }
   }
 

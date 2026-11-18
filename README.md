@@ -53,8 +53,18 @@ with the mouse to shove it. The *Analytic Controller* GUI folder has behaviours 
 Wave, Dance), command sliders, stand height, hip strength, follow camera, and markers. Marker colours: red = capture
 point, green = commanded CoP, blue = next foothold.
 
+**Humanoid + Sword** (scene dropdown). The same robot and controller holding a 0.3 kg training sword in the right
+hand, with a hanging practice bag to hit. Keys **1–5** (or the *Sword techniques* folder) trigger an overhead chop, a
+horizontal slash, a backhand, a diagonal slash and a thrust. **K** loops them as a kata. Techniques work standing or
+while walking.
+- **Moves:** keyframed joint-space splines (`src/controllers/swordMoves.js`) for the right arm, torso twist and bend, a height dip and a forward lean. The poses were found offline with numeric IK on MuJoCo's own kinematics.
+- **Tracking:** joint PD with velocity reference plus a computed-torque feedforward `(M q̈)_arm` from `mj_mulM`. The balance controller absorbs the reaction torques.
+- **Limits:** the arm has no wrist, so the blade is rigid with the forearm at a 25° grip. The capsule feet have no torsional friction, so the wide sweeps run at 0.6× tempo, and moves started while walking use 0.6× tempo and 0.3× torso twist. At full speed the robot spins on its feet.
+- **Collisions:** the sword collides only with the bag, never with the robot or the floor. The robot can walk through the bag.
+- **Regenerating:** `assets/scenes/generate_sword_scene.py` rebuilds the scene XML from `humanoid.xml`.
+
 **Tests** (headless Node, same code as the browser):
-- `npm run test:controller` runs acceptance tests: standing, pushes, walking speed/strafe/turn tracking, scripted stop/start scenario, behaviours, stock motors, cost, other timestep.
+- `npm run test:controller` runs acceptance tests: standing, pushes, walking speed/strafe/turn tracking, scripted stop/start scenario, behaviours, stock motors, cost, other timestep, and the sword techniques standing and walking.
 - `npm run test:soak` sends random commands with stops for 120 s per seed. At the time of writing, 39/40 seeds survive with frequent stops and 24/24 with continuous stepping.
 - `npm test` also runs `test_load.mjs`. This branch pins `@mujoco/mujoco` to 3.12.0, because `^3.12.0` now resolves to 3.17, which rejects `flex.xml` and `hammock.xml`.
 

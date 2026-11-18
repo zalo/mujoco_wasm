@@ -3,6 +3,7 @@
 //   node test/controller.test.mjs 3 6        run only groups 3 and 6
 import { runTrial } from './harness.mjs';
 import { BEHAVIOURS, BehaviourRunner } from '../src/controllers/behaviours.js';
+import { SwordPlayer, MOVE_NAMES, moveDuration } from '../src/controllers/swordMoves.js';
 
 const only = process.argv.slice(2).map(Number);
 const want = (g) => only.length === 0 || only.includes(g);
@@ -76,6 +77,27 @@ if (want(11)) {
     n++; if (r.fell) falls.push(`${name}(${vx},${wz})@${r.fallT.toFixed(1)}`);
   }
   check(`11 walk -> stop -> standing behaviour (${n} runs)`, falls.length === 0, falls.join(' '));
+}
+if (want(12)) {
+  // humanoid_sword.xml: sword techniques through SwordPlayer exactly as the UI drives them
+  const swordRun = async (T, base, trig) => { const P = new SwordPlayer(); let C = null;
+    return runTrial({ scene: 'humanoid_sword.xml', T, log: { every: 1, fn: (c) => { C = c; } },
+      cmd: (t) => { trig(t, P); return P.apply(base(t), t, C); } }); };
+  const stand = () => ({ walk: false });
+  let r = await swordRun(10, stand, () => {});
+  check('12 sword: stand 10 s in guard', !r.fell && Math.hypot(r.dx, r.dy) < 0.05, `drift=${Math.hypot(r.dx, r.dy).toFixed(3)}`);
+  for (const name of MOVE_NAMES) {
+    let fired = false;
+    r = await swordRun(2 + moveDuration(name) + 3, stand, (t, P) => { if (!fired && t >= 2) { P.trigger(name); fired = true; } });
+    check(`12 sword: ${name}`, !r.fell, `captureSteps=${r.captureSteps}`);
+  }
+  r = await swordRun(30, stand, (t, P) => { P.kata = t > 2; });
+  check('12 sword: kata loop 30 s standing', !r.fell, `captureSteps=${r.captureSteps}`);
+  for (const [label, base] of [['walk 0.3', (t) => ({ walk: t > 1, vx: t > 2 ? 0.3 : 0 })], ['walk 0.6', (t) => ({ walk: t > 1, vx: t > 2 ? 0.6 : 0 })],
+    ['walk -0.2', (t) => ({ walk: t > 1, vx: t > 2 ? -0.2 : 0 })], ['turn', (t) => ({ walk: t > 1, vx: 0.2, wz: t > 2 ? 0.4 : 0 })], ['march', (t) => ({ walk: t > 1 })]]) {
+    r = await swordRun(25, base, (t, P) => { P.kata = t > 3; });
+    check(`12 sword: kata while ${label}`, !r.fell);
+  }
 }
 if (want(8)) for (const vx of [0, 0.3, -0.3]) {   // stock gears are chaotic at the saturation edge above ~0.4 m/s (see README)
   // stock actuators (hip x1) with arms forward: the hard-mode toggle. Saturation is expected; only falls are checked.

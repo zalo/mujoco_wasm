@@ -1,7 +1,7 @@
 // Browser-side UI for the analytic controller: lil-gui folder, keyboard driving, follow camera, algorithm markers
 // (capture point / CoP / next foothold), random pushes and a HUD. All controller maths lives in ./controllers/.
 import * as THREE from 'three';
-import { BEHAVIOUR_NAMES, BehaviourRunner } from './controllers/index.js';
+import { BEHAVIOUR_NAMES, BehaviourRunner, SwordPlayer, MOVE_NAMES, hasSword } from './controllers/index.js';
 
 const STOCK_ARMS = { armPose: [0, 0, -0.6], armSwing: 0 };          // arms forward: the preset that copes with stock hip motors
 const DEFAULT_ARMS = { armPose: [0.65, -1.05, -0.6], armSwing: 0.8 };
@@ -14,6 +14,8 @@ export function setupControllerUI(demo) {
   const P = demo.ctrlParams;
   const keys = new Set();
   const runner = new BehaviourRunner(P.behaviour);
+  const sword = new SwordPlayer();
+  let swordOn = false;
   let fallenSince = null, push = null, lastTorso = null;
 
   // ------------------------------------------------------------------ GUI
@@ -36,6 +38,12 @@ export function setupControllerUI(demo) {
   folder.add(P, 'autoReset').name('Auto-reset after fall');
   folder.open();
 
+  // Sword techniques (only for humanoid_sword.xml)
+  const swordFolder = demo.gui.addFolder('Sword techniques (keys 1-5, K = kata)');
+  MOVE_NAMES.forEach((name, i) => swordFolder.add({ go: () => sword.trigger(name) }, 'go').name(`${i + 1}  ${name}`));
+  swordFolder.add(sword, 'kata').name('Kata (loop all techniques)').listen();
+  swordFolder.open();
+
   function applyHipBoost() {
     const c = demo.controller; if (!c) return;
     c.setHipBoost(P.hipBoost);
@@ -48,6 +56,8 @@ export function setupControllerUI(demo) {
     if (e.ctrlKey || e.metaKey || e.altKey || e.target.tagName === 'INPUT' || !demo.controller) return;   // Ctrl+A / Ctrl+L stay with the demo
     if (DRIVE.has(e.code)) { keys.add(e.code); e.preventDefault(); }
     else if (e.code === 'KeyP') randomPush();
+    else if (swordOn && /^Digit[1-9]$/.test(e.code) && +e.code.slice(5) <= MOVE_NAMES.length) sword.trigger(MOVE_NAMES[+e.code.slice(5) - 1]);
+    else if (swordOn && e.code === 'KeyK') sword.kata = !sword.kata;
     else if (e.code === 'KeyX') { P.vx = P.vy = P.wz = 0; }
   });
   document.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -102,13 +112,15 @@ export function setupControllerUI(demo) {
     markers.visible = on && P.showMarkers;
     hud.style.display = demo.controller ? 'block' : 'none';
     folder.show(!!demo.controller);
+    swordFolder.show(!!demo.controller && swordOn);
   }
 
   // ------------------------------------------------------------------ public API used by main.js
   const api = {
     /** Full controller command for this physics step. */
     command(time) {
-      return runner.command(time, userCommand(), demo.controller);
+      const cmd = runner.command(time, userCommand(), demo.controller);
+      return swordOn ? sword.apply(cmd, time, demo.controller, P.height) : cmd;
     },
 
     /** Apply scripted perturbations (random push) for the coming physics step. */
@@ -122,6 +134,8 @@ export function setupControllerUI(demo) {
     /** Called after a model (re)load. */
     onControllerChanged() {
       lastTorso = null; runner.select(P.behaviour, 0); fallenSince = null; push = null;
+      swordOn = !!demo.controller && hasSword(demo.mujoco, demo.model);
+      sword.queue.length = 0; sword.current = null; sword.kata = false;
       if (demo.controller) applyHipBoost();
       updateVisibility();
     },
@@ -181,10 +195,11 @@ export function setupControllerUI(demo) {
         `mode ${mode}\n` +
         `cmd vx ${u.vx.toFixed(2)} vy ${u.vy.toFixed(2)} wz ${u.wz.toFixed(2)}   speed ${v.toFixed(2)} m/s   COM z ${info.com[2].toFixed(2)} m\n` +
         `steps ${info.steps}  capture steps ${info.captureSteps}  saturated motors ${info.satCount}/21  hip x${info.hipBoost}\n` +
+        (swordOn ? `sword: ${sword.current || 'guard'}${sword.kata ? '  (kata)' : ''}  |  1 chop  2 horizontal  3 backhand  4 diagonal  5 thrust  K kata\n` : '') +
         `W/S A/D Q/E drive, Shift fast, X stop, P push, drag to shove  |  ` +
         `red = capture point  green = CoP  blue = next foothold`;
     },
   };
-  updateVisibility();
+  api.onControllerChanged();   // the initial scene's controller was created before this UI existed
   return api;
 }

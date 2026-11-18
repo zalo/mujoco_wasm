@@ -24,7 +24,7 @@ copyDir('assets/scenes');
 
 const scenes = [
   "22_humanoids.xml", "adhesion.xml", "agility_cassie/scene.xml", "arm26.xml",
-  "balloons.xml", "car.xml", "flex.xml", "hammock.xml", "humanoid.xml",
+  "balloons.xml", "car.xml", "flex.xml", "hammock.xml", "humanoid.xml", "humanoid_sword.xml",
   "model.xml", "mug.xml", "scene.xml", "shadow_hand/scene_right.xml",
   "shadow_hand/scene_left.xml", "simple.xml", "slider_crank.xml",
   "model_with_tendon.xml",
