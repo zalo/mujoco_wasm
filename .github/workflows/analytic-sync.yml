@@ -1,0 +1,27 @@
+# Pushing this branch re-runs the Pages deploy on main, which builds main at the site root and this branch at /analytic/.
+# (The github-pages environment only deploys from main, so this branch dispatches main's workflow instead of deploying.)
+name: Redeploy Pages for analytic-controller
+
+on:
+  push:
+    branches: ["analytic-controller"]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch main's Pages workflow (only once it builds /analytic/)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Guard: the old main workflow rebuilds only the root (with an unpinned MuJoCo); don't trigger that.
+          if gh api "repos/$REPO/contents/.github/workflows/main.yml?ref=main" --jq .content | base64 -d | grep -q "site/analytic"; then
+            gh workflow run main.yml --ref main -R "$REPO"
+          else
+            echo "main's Pages workflow does not build /analytic/ yet - skipping."
+          fi
