@@ -5,6 +5,8 @@ import { OrbitControls    } from '../node_modules/three/examples/jsm/controls/Or
 import { DragStateManager } from './utils/DragStateManager.js';
 import { setupGUI, downloadExampleScenesFolder, loadSceneFromURL, drawTendonsAndFlex, getPosition, getQuaternion, toMujocoPos, standardNormal } from './mujocoUtils.js';
 import   load_mujoco        from '../node_modules/@mujoco/mujoco/mujoco.js';
+import { createController } from './controllers/index.js';
+import { setupControllerUI } from './controllerUI.js';
 
 // Load the MuJoCo Module
 // The .wasm binary ships separately from the .js loader, so point Emscripten
@@ -35,6 +37,12 @@ export class MuJoCoDemo {
     this.tmpVec  = new THREE.Vector3();
     this.tmpQuat = new THREE.Quaternion();
     this.updateGUICallbacks = [];
+
+    // Analytic (non-learned) locomotion controller; null for scenes it does not know how to drive.
+    this.controller = null;
+    this.controllerUI = null;
+    this.ctrlParams = { enabled: true, behaviour: 'Stand / Walk', vx: 0.0, vy: 0.0, wz: 0.0, height: 0.80,
+                        hipBoost: 2.0, followCamera: true, showMarkers: true, autoReset: true };
 
     this.container = document.createElement( 'div' );
     document.body.appendChild( this.container );
@@ -110,9 +118,25 @@ export class MuJoCoDemo {
     [this.model, this.data, this.bodies, this.lights] =
       await loadSceneFromURL(mujoco, initialScene, this);
 
+    this.createController();
+
     this.gui = new GUI();
     setupGUI(this);
+    this.controllerUI = setupControllerUI(this);
   }
+
+  /** (Re)create the analytic controller for the current model. Call disposeController() before the model is freed. */
+  createController() {
+    this.controller = createController(mujoco, this.model, this.data, { hipBoost: this.ctrlParams.hipBoost });
+    this.controllerUI?.onControllerChanged();
+  }
+
+  disposeController() {
+    this.controller?.dispose();
+    this.controller = null;
+  }
+
+  get controllerActive() { return !!(this.controller && this.ctrlParams.enabled); }
 
   onWindowResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -130,8 +154,8 @@ export class MuJoCoDemo {
       if (timeMS - this.mujoco_time > 35.0) { this.mujoco_time = timeMS - 35.0; }
       while (this.mujoco_time < timeMS) {
 
-        // Jitter the control state with gaussian random noise
-        if (this.params["ctrlnoisestd"] > 0.0) {
+        // Jitter the control state with gaussian random noise (only when no controller owns ctrl)
+        if (this.params["ctrlnoisestd"] > 0.0 && !this.controllerActive) {
           let rate  = Math.exp(-timestep / Math.max(1e-10, this.params["ctrlnoiserate"]));
           let scale = this.params["ctrlnoisestd"] * Math.sqrt(1 - rate * rate);
           let currentCtrl = this.data.ctrl;
@@ -155,13 +179,27 @@ export class MuJoCoDemo {
           let bodyID = dragged.bodyID;
           this.dragStateManager.update(); // Update the world-space force origin
           let force = toMujocoPos(this.dragStateManager.currentWorld.clone().sub(this.dragStateManager.worldHit).multiplyScalar(this.model.body_mass[bodyID] * 250));
+          if (this.controllerActive) {
+            // A balancing robot only tolerates ~50 N of sustained push: soften and cap the drag spring so it steps instead of toppling.
+            force.multiplyScalar(0.3);
+            if (force.length() > 80) { force.setLength(80); }
+          }
           let point = toMujocoPos(this.dragStateManager.worldHit.clone());
           mujoco.mj_applyFT(this.model, this.data, [force.x, force.y, force.z], [0, 0, 0], [point.x, point.y, point.z], bodyID, this.data.qfrc_applied);
 
           // TODO: Apply pose perturbations (mocap bodies only).
         }
 
-        mujoco.mj_step(this.model, this.data);
+        if (this.controllerActive) {
+          // Split the step so the controller sees kinematics/COM/contacts of the CURRENT state:
+          // mj_step1 (position+velocity stages) -> controller writes ctrl -> mj_step2 (actuation, constraints, integrate).
+          this.controllerUI.beforeStep();
+          mujoco.mj_step1(this.model, this.data);
+          this.controller.step(this.controllerUI.command(this.data.time));
+          mujoco.mj_step2(this.model, this.data);
+        } else {
+          mujoco.mj_step(this.model, this.data);
+        }
 
         this.mujoco_time += timestep * 1000.0;
       }
@@ -216,6 +254,9 @@ export class MuJoCoDemo {
       }
     }
 
+    // Controller overlays: follow camera, DCM / CoP / foothold markers, HUD.
+    this.controllerUI?.update(timeMS);
+
     // Draw Tendons and Flex verts
     drawTendonsAndFlex(this.mujocoRoot, this.model, this.data);
 
@@ -225,4 +266,5 @@ export class MuJoCoDemo {
 }
 
 let demo = new MuJoCoDemo();
+window.demo = demo;   // handy for poking at the controller from the devtools console
 await demo.init();

@@ -3,11 +3,14 @@ import { Reflector  } from './utils/Reflector.js';
 import { MuJoCoDemo } from './main.js';
 
 export async function reloadFunc() {
-  // Delete the old scene and load the new scene
+  // Delete the old scene and load the new scene. The controller holds wasm buffers and writes to the model, so it
+  // must be disposed before loadSceneFromURL frees model/data, and recreated afterwards.
+  this.disposeController?.();
   this.scene.remove(this.scene.getObjectByName("MuJoCo Root"));
   [this.model, this.data, this.bodies, this.lights] =
     await loadSceneFromURL(this.mujoco, this.params.scene, this);
   this.mujoco.mj_forward(this.model, this.data);
+  this.createController?.();
   for (let i = 0; i < this.updateGUICallbacks.length; i++) {
     this.updateGUICallbacks[i](this.model, this.data, this.params);
   }
@@ -180,7 +183,9 @@ export function setupGUI(parentContext) {
   const resetSimulation = () => {
     parentContext.mujoco.mj_resetData(parentContext.model, parentContext.data);
     parentContext.mujoco.mj_forward(parentContext.model, parentContext.data);
+    parentContext.controller?.reset();
   };
+  parentContext.resetSimulation = resetSimulation;
   simulationFolder.add({reset: () => { resetSimulation(); }}, 'reset').name('Reset');
   document.addEventListener('keydown', (event) => {
     if (event.code === 'Backspace') { resetSimulation(); event.preventDefault(); }});
@@ -193,7 +198,10 @@ export function setupGUI(parentContext) {
   keyframeGUI.onChange((value) => {
     if (value < parentContext.model.nkey) {
       parentContext.data.qpos.set(parentContext.model.key_qpos.slice(
-        value * parentContext.model.nq, (value + 1) * parentContext.model.nq)); }});
+        value * parentContext.model.nq, (value + 1) * parentContext.model.nq));
+      parentContext.data.qvel.fill(0);
+      parentContext.mujoco.mj_forward(parentContext.model, parentContext.data);
+      parentContext.controller?.reset(); }});
   parentContext.updateGUICallbacks.push((model, data, params) => {
     let nkeys = parentContext.model.nkey;
     console.log("new model loaded. has " + nkeys + " keyframes.");
