@@ -27,7 +27,7 @@
   },
   "homepage": "https://github.com/zalo/mujoco_wasm#readme",
   "dependencies": {
-    "@mujoco/mujoco": "^3.12.0",
+    "@mujoco/mujoco": "3.12.0",
     "esbuild": "^0.25.12",
     "three": "^0.181.0"
   },

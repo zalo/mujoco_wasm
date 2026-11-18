@@ -1,4 +1,5 @@
-# Simple workflow for deploying static content to GitHub Pages
+# Deploys GitHub Pages: the `main` branch at the site root and the `analytic-controller` branch at /analytic/.
+# (A repo has a single Pages artifact, so one run assembles both.)
 name: Deploy static content to Pages
 
 on:
@@ -7,6 +8,7 @@ on:
     branches: ["main"]
 
   # Allows you to run this workflow manually from the Actions tab
+  # (also dispatched by analytic-sync.yml when the analytic-controller branch is pushed)
   workflow_dispatch:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
@@ -29,8 +31,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout main (site root)
         uses: actions/checkout@v4
+        with:
+          ref: main
+          path: site
+      - name: Checkout analytic-controller (served at /analytic/)
+        uses: actions/checkout@v4
+        with:
+          ref: analytic-controller
+          path: site/analytic
       # Ideally this makes the next step run faster
       # But I haven't noticed a speed difference
       # May want to cache the ./node_modules directory directly...
@@ -47,22 +57,31 @@ jobs:
             ${{ runner.os }}-build-
             ${{ runner.os }}-
       - name: Install Node Modules
-        run: npm install
-      # Switching the HTML entrypoint over to the build
+        run: |
+          (cd site && npm install)
+          # Keep the root on the MuJoCo version it was last deployed with: package.json's ^3.12.0 now resolves to
+          # 3.17, which rejects flex.xml / hammock.xml ("unrecognized attribute: 'internal'"). Drop once those are updated.
+          (cd site && npm install --no-save @mujoco/mujoco@3.12.0)
+          (cd site/analytic && npm install)
+      # Switching the HTML entrypoints over to the build
       - name: Pre-Process Site
         run: |
-          sed -e 's/\/src\//\/build\//g' index.html > index.html.tmp
-          mv index.html.tmp index.html
-          mkdir -p build
+          for d in site site/analytic; do
+            sed -e 's/\/src\//\/build\//g' $d/index.html > $d/index.html.tmp
+            mv $d/index.html.tmp $d/index.html
+            mkdir -p $d/build
+          done
       - name: Run esbuild
-        run: npm run build
+        run: |
+          (cd site && npm run build)
+          (cd site/analytic && npm run build)
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          # Upload entire repository
-          path: '.'
+          # Upload the assembled site (main at the root, analytic-controller under analytic/)
+          path: 'site'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

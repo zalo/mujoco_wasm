@@ -56,7 +56,9 @@ point, green = commanded CoP, blue = next foothold.
 **Tests** (headless Node, same code as the browser):
 - `npm run test:controller` runs acceptance tests: standing, pushes, walking speed/strafe/turn tracking, scripted stop/start scenario, behaviours, stock motors, cost, other timestep.
 - `npm run test:soak` sends random commands with stops for 120 s per seed. At the time of writing, 39/40 seeds survive with frequent stops and 24/24 with continuous stepping.
-- `npm test` also runs `test_load.mjs`. With `@mujoco/mujoco` 3.17 (what `^3.12.0` currently resolves to), `flex.xml` and `hammock.xml` fail to load. That predates this branch.
+- `npm test` also runs `test_load.mjs`. This branch pins `@mujoco/mujoco` to 3.12.0, because `^3.12.0` now resolves to 3.17, which rejects `flex.xml` and `hammock.xml`.
+
+Live at **https://zalo.github.io/mujoco_wasm/analytic/**. The Pages workflow on `main` builds this branch into `/analytic/`, and pushing this branch triggers a redeploy.
 
 ## Build
 
